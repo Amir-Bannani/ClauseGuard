@@ -2,6 +2,8 @@
 
 **NLP-powered contract clause analysis and concern detection.**
 
+[![CI](https://github.com/AdemGhalleb/ClauseGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/AdemGhalleb/ClauseGuard/actions/workflows/ci.yml)
+
 ClauseGuard is a production-oriented NLP system that extracts and classifies individual clauses from contracts, then evaluates those clauses against a documented set of configurable checks to surface *potentially concerning provisions* for human review.
 
 ClauseGuard is **not** an "AI lawyer," a legal-advice system, or an LLM wrapper. It is a supervised NLP and backend-engineering project that treats contract analysis as two separate problems: **clause classification** (what kind of clause is this?) and **checklist evaluation** (does this clause trigger a documented check?).
@@ -184,6 +186,32 @@ ClauseGuard/
 ```
 
 This repository currently contains documentation only. Application code (training scripts, services, frontend) will be added as the project progresses. The structure above will grow to reflect that code.
+
+## CI / CD (GitHub Actions)
+
+[![CI](https://github.com/AdemGhalleb/ClauseGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/AdemGhalleb/ClauseGuard/actions/workflows/ci.yml)
+
+One workflow, [`.github/workflows/ci.yml`](.github/workflows/ci.yml), runs on every push to `main` and on every pull request:
+
+```text
+      push / PR
+         ↓
+  GitHub Actions
+         ↓
+  ┌──────────────┐
+  │   structure   │   always runs — docs + required files
+  │     python    │   activates when Python config appears
+  │   frontend    │   activates when package.json appears
+  │    docker     │   activates when a Dockerfile appears
+  └──────────────┘
+         ↓
+      merged
+```
+
+Design rules:
+
+- **Checks activate only for components that actually exist.** Today the repo is documentation-only, so `structure` is the only job that runs; the Python, frontend, and Docker jobs report as **skipped** (not failed) until their config files appear.
+- **Deployment (CD) is intentionally absent** — there is no hosting target yet. See [docs/ci-cd.md](docs/ci-cd.md) and the CI/CD checklist in [docs/roadmap.md](docs/roadmap.md).
 
 ## Development
 

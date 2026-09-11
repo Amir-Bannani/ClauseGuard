@@ -114,6 +114,26 @@ Planned milestones for ClauseGuard. All milestones are forward-looking; nothing 
 
 ---
 
+## CI / CD
+
+CI is the only part of the pipeline that runs automatically in GitHub. See
+[docs/ci-cd.md](ci-cd.md) for the full design; the short version is that CI
+jobs auto-activate as each component materializes, so the pipeline never
+reports failures for components that do not yet exist.
+
+Deployment concerns are documented here now so they are not forgotten, but
+they will only be implemented once a hosting target exists and there is code
+to deploy. CD is intentionally **not** invented ahead of time.
+
+- [x] Initial GitHub Actions CI — structure, Python, frontend, Docker ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml))
+- [ ] Mark the first CI run green on GitHub (structure + any existing component jobs)
+- [ ] Python package tooling (uv or pip + ruff + pytest) locked in when the first ML code lands
+- [ ] Automated Docker image publishing (registry + credentials required first)
+- [ ] Continuous deployment to a hosting target (see [docs/ci-cd.md](ci-cd.md) for the checklist)
+- [ ] ML training workflow (`ml-training.yml`, manually triggered) — only once the training code exists
+
+---
+
 ## Principles
 
 - **Do the next thing.** Milestones are ordered; do not skip ahead to the exciting part.

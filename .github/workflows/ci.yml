@@ -1,0 +1,307 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+
+jobs:
+  # Runs on every push/PR. Verifies the repository keeps its essential
+  # documentation and workflow files, regardless of which components exist.
+  structure:
+    name: Repository structure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Required files exist
+        run: |
+          missing=0
+          for file in \
+            README.md \
+            docs/architecture.md \
+            docs/dataset.md \
+            docs/ml-pipeline.md \
+            docs/roadmap.md \
+            .github/workflows/ci.yml
+          do
+            if [ ! -f "$file" ]; then
+              echo "Missing required file: $file"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+          echo "All required files present."
+
+      - name: Documentation is non-empty
+        run: |
+          for file in README.md docs/*.md; do
+            if [ ! -s "$file" ]; then
+              echo "Missing or empty documentation file: $file"
+              exit 1
+            fi
+          done
+          echo "All documentation files non-empty."
+
+  # Activates automatically once Python project files exist (pyproject.toml,
+  # requirements*.txt, uv.lock, etc.) at the root or in a component directory.
+  # Until then the job is reported as 'skipped' on PRs, never as 'failed'.
+  python:
+    name: Python - lint, format, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: hashFiles('**/pyproject.toml', '**/setup.py', '**/setup.cfg', '**/requirements*.txt', '**/Pipfile', '**/poetry.lock', '**/uv.lock', '**/pytest.ini', '**/tox.ini') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Locate Python project directory
+        id: pydir
+        run: |
+          if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          else
+            found="$(find . -maxdepth 2 \( -name pyproject.toml -o -name setup.py -o -name setup.cfg \) -not -path '*/node_modules/*' -not -path './.git/*' -print -quit)"
+            if [ -n "$found" ]; then
+              echo "dir=$(dirname "$found")" >> "$GITHUB_OUTPUT"
+            else
+              echo "dir=." >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            **/poetry.lock
+            **/uv.lock
+            **/requirements*.txt
+            **/pyproject.toml
+
+      - name: Install uv
+        if: hashFiles('**/uv.lock') != ''
+        run: python -m pip install uv
+
+      - name: Install dependencies (uv)
+        if: hashFiles('**/uv.lock') != ''
+        run: |
+          cd "${{ steps.pydir.outputs.dir }}"
+          uv sync --frozen
+
+      - name: Install dependencies (pip)
+        if: hashFiles('**/uv.lock') == ''
+        run: |
+          set -euo pipefail
+          cd "${{ steps.pydir.outputs.dir }}"
+          python -m pip install --upgrade pip
+          if ls requirements*.txt >/dev/null 2>&1; then
+            for file in requirements*.txt; do
+              python -m pip install -r "$file"
+            done
+          fi
+          if ls requirements/*.txt >/dev/null 2>&1; then
+            for file in requirements/*.txt; do
+              python -m pip install -r "$file"
+            done
+          fi
+          if [ -f pyproject.toml ] || [ -f setup.py ]; then
+            python -m pip install -e .
+          fi
+
+      - name: Lint (ruff)
+        run: |
+          set -euo pipefail
+          cd "${{ steps.pydir.outputs.dir }}"
+          if [ -f ruff.toml ] || [ -f .ruff.toml ] || grep -q '^\[tool\.ruff\]' pyproject.toml 2>/dev/null; then
+            if [ -f uv.lock ]; then
+              uv run --frozen ruff check .
+            else
+              python -m pip install ruff
+              ruff check .
+            fi
+          else
+            echo "No ruff configuration found; lint step skipped."
+          fi
+
+      - name: Format check (ruff format --check)
+        run: |
+          set -euo pipefail
+          cd "${{ steps.pydir.outputs.dir }}"
+          if [ -f ruff.toml ] || [ -f .ruff.toml ] || grep -q '^\[tool\.ruff\]' pyproject.toml 2>/dev/null; then
+            if [ -f uv.lock ]; then
+              uv run --frozen ruff format --check .
+            else
+              ruff format --check .
+            fi
+          else
+            echo "No ruff configuration found; format check skipped."
+          fi
+
+      # Unit tests only. Full model training/evaluation is an ML experiment
+      # workflow, not a normal pull-request CI job (see docs/ml-pipeline.md).
+      - name: Tests (pytest)
+        run: |
+          set -euo pipefail
+          cd "${{ steps.pydir.outputs.dir }}"
+          if [ -d tests ] || [ -d test ] || [ -n "$(find . -maxdepth 3 -type f \( -name 'test_*.py' -o -name '*_test.py' \) -print -quit)" ]; then
+            if [ -f uv.lock ]; then
+              uv run --frozen pytest
+            else
+              python -m pip install pytest
+              python -m pytest
+            fi
+          else
+            echo "No tests found; test run skipped."
+          fi
+
+  # Activates automatically once the frontend exists (package.json present at
+  # the root or in a component directory). Only npm scripts that actually
+  # exist in package.json are executed.
+  frontend:
+    name: Frontend - lint, typecheck, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: hashFiles('**/package.json') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Locate frontend directory
+        id: fedir
+        run: |
+          if [ -f package.json ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          else
+            found="$(find . -maxdepth 2 -name package.json -not -path '*/node_modules/*' -not -path './.git/*' -print -quit)"
+            if [ -n "$found" ]; then
+              echo "dir=$(dirname "$found")" >> "$GITHUB_OUTPUT"
+            else
+              echo "dir=." >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Set up Node.js (npm)
+        if: hashFiles('**/package-lock.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ${{ steps.fedir.outputs.dir }}/package-lock.json
+
+      - name: Set up Node.js (pnpm)
+        if: hashFiles('**/pnpm-lock.yaml') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          pnpm-version: '9'
+          cache-dependency-path: ${{ steps.fedir.outputs.dir }}/pnpm-lock.yaml
+
+      - name: Set up Node.js (yarn or no lockfile)
+        if: hashFiles('**/package-lock.json') == '' && hashFiles('**/pnpm-lock.yaml') == ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Detect package manager
+        id: pm
+        run: |
+          cd "${{ steps.fedir.outputs.dir }}"
+          if [ -f pnpm-lock.yaml ]; then
+            echo "manager=pnpm" >> "$GITHUB_OUTPUT"
+          elif [ -f yarn.lock ]; then
+            echo "manager=yarn" >> "$GITHUB_OUTPUT"
+          elif [ -f package-lock.json ]; then
+            echo "manager=npm" >> "$GITHUB_OUTPUT"
+          else
+            echo "manager=npm" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          cd "${{ steps.fedir.outputs.dir }}"
+          case "${{ steps.pm.outputs.manager }}" in
+            pnpm) pnpm install --frozen-lockfile ;;
+            yarn) corepack enable && yarn install --immutable ;;
+            npm)  npm ci ;;
+            *)    npm install ;;
+          esac
+
+      - name: Lint (npm run lint)
+        run: |
+          set -euo pipefail
+          cd "${{ steps.fedir.outputs.dir }}"
+          if jq -e '.scripts.lint' package.json >/dev/null 2>&1; then
+            npm run lint
+          else
+            echo "No 'lint' script in package.json; lint step skipped."
+          fi
+
+      - name: Typecheck (npm run typecheck)
+        run: |
+          set -euo pipefail
+          cd "${{ steps.fedir.outputs.dir }}"
+          if jq -e '.scripts.typecheck' package.json >/dev/null 2>&1; then
+            npm run typecheck
+          else
+            echo "No 'typecheck' script in package.json; typecheck step skipped."
+          fi
+
+      - name: Build (npm run build)
+        run: |
+          set -euo pipefail
+          cd "${{ steps.fedir.outputs.dir }}"
+          if jq -e '.scripts.build' package.json >/dev/null 2>&1; then
+            npm run build
+          else
+            echo "No 'build' script in package.json; build step skipped."
+          fi
+
+  # Activates automatically once a Dockerfile exists. Verifies only that the
+  # images build from a clean CI environment; nothing is pushed to a registry.
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: hashFiles('**/Dockerfile') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker images
+        run: |
+          set -euo pipefail
+          if [ -f docker-compose.yml ] || [ -f compose.yml ] || [ -f docker-compose.yaml ] || [ -f compose.yaml ]; then
+            docker compose build
+          else
+            built=0
+            for dockerfile in $(find . -name 'Dockerfile' -not -path './.git/*'); do
+              context="$(dirname "$dockerfile")"
+              echo "Building $context"
+              docker build "$context"
+              built=$((built + 1))
+            done
+            if [ "$built" -eq 0 ]; then
+              echo "No Dockerfiles found to build."
+              exit 1
+            fi
+          fi
