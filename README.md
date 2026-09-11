@@ -36,8 +36,8 @@ A separate, rule-based evaluation layer then applies explicitly documented check
 flowchart LR
     A[PDF / DOCX] --> B[Text extraction]
     B --> C[Clause / section segmentation]
-    C --> D[Clause classification\n(supervised NLP)]
-    D --> E[Checklist evaluation\n(rule-based, V1)]
+    C --> D[Clause classification\n supervised NLP]
+    D --> E[Checklist evaluation\n rule-based, V1]
     E --> F[Structured findings]
     F --> G[Analysis dashboard]
 ```
