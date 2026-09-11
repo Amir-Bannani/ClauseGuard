@@ -18,6 +18,65 @@ env:
   NODE_VERSION: "22"
 
 jobs:
+  detect:
+    name: Detect repository components
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      python: ${{ steps.components.outputs.python }}
+      python_uv: ${{ steps.components.outputs.python_uv }}
+      frontend: ${{ steps.components.outputs.frontend }}
+      frontend_npm_lock: ${{ steps.components.outputs.frontend_npm_lock }}
+      frontend_pnpm_lock: ${{ steps.components.outputs.frontend_pnpm_lock }}
+      docker: ${{ steps.components.outputs.docker }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect components
+        id: components
+        shell: bash
+        run: |
+          has_file() {
+            find . -type f "$@" -not -path './.git/*' -print -quit | grep -q .
+          }
+
+          if has_file \( -name pyproject.toml -o -name setup.py -o -name setup.cfg -o -name 'requirements*.txt' -o -name Pipfile -o -name poetry.lock -o -name uv.lock -o -name pytest.ini -o -name tox.ini \); then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "python=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if has_file -name uv.lock; then
+            echo "python_uv=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "python_uv=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if has_file -name package.json; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if has_file -name package-lock.json; then
+            echo "frontend_npm_lock=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend_npm_lock=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if has_file -name pnpm-lock.yaml; then
+            echo "frontend_pnpm_lock=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "frontend_pnpm_lock=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if has_file -name Dockerfile; then
+            echo "docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docker=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Runs on every push/PR. Verifies the repository keeps its essential
   # documentation and workflow files, regardless of which components exist.
   structure:
@@ -64,9 +123,10 @@ jobs:
   # Until then the job is reported as 'skipped' on PRs, never as 'failed'.
   python:
     name: Python - lint, format, tests
+    needs: detect
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    if: hashFiles('**/pyproject.toml', '**/setup.py', '**/setup.cfg', '**/requirements*.txt', '**/Pipfile', '**/poetry.lock', '**/uv.lock', '**/pytest.ini', '**/tox.ini') != ''
+    if: needs.detect.outputs.python == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,17 +157,17 @@ jobs:
             **/pyproject.toml
 
       - name: Install uv
-        if: hashFiles('**/uv.lock') != ''
+        if: needs.detect.outputs.python_uv == 'true'
         run: python -m pip install uv
 
       - name: Install dependencies (uv)
-        if: hashFiles('**/uv.lock') != ''
+        if: needs.detect.outputs.python_uv == 'true'
         run: |
           cd "${{ steps.pydir.outputs.dir }}"
           uv sync --frozen
 
       - name: Install dependencies (pip)
-        if: hashFiles('**/uv.lock') == ''
+        if: needs.detect.outputs.python_uv != 'true'
         run: |
           set -euo pipefail
           cd "${{ steps.pydir.outputs.dir }}"
@@ -177,9 +237,10 @@ jobs:
   # exist in package.json are executed.
   frontend:
     name: Frontend - lint, typecheck, build
+    needs: detect
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: hashFiles('**/package.json') != ''
+    if: needs.detect.outputs.frontend == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -199,7 +260,7 @@ jobs:
           fi
 
       - name: Set up Node.js (npm)
-        if: hashFiles('**/package-lock.json') != ''
+        if: needs.detect.outputs.frontend_npm_lock == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -207,7 +268,7 @@ jobs:
           cache-dependency-path: ${{ steps.fedir.outputs.dir }}/package-lock.json
 
       - name: Set up Node.js (pnpm)
-        if: hashFiles('**/pnpm-lock.yaml') != ''
+        if: needs.detect.outputs.frontend_pnpm_lock == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -216,7 +277,7 @@ jobs:
           cache-dependency-path: ${{ steps.fedir.outputs.dir }}/pnpm-lock.yaml
 
       - name: Set up Node.js (yarn or no lockfile)
-        if: hashFiles('**/package-lock.json') == '' && hashFiles('**/pnpm-lock.yaml') == ''
+        if: needs.detect.outputs.frontend_npm_lock != 'true' && needs.detect.outputs.frontend_pnpm_lock != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -280,9 +341,10 @@ jobs:
   # images build from a clean CI environment; nothing is pushed to a registry.
   docker:
     name: Docker build
+    needs: detect
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: hashFiles('**/Dockerfile') != ''
+    if: needs.detect.outputs.docker == 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4

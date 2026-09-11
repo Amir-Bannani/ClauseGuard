@@ -32,7 +32,7 @@ Two intentional properties:
 
 ## Component Detection
 
-Detection is done with GitHub's `hashFiles()` and a locate step that resolves a sub-directory (`.` by default) so the workflow does not assume everything lives at the repository root.
+Detection is done by a checkout-based `detect` job, which emits component and lockfile booleans to downstream jobs. A locate step then resolves a sub-directory (`.` by default) so the workflow does not assume everything lives at the repository root. This is necessary because GitHub Actions cannot use `hashFiles()` in job-level conditions before a runner has checked out the repository.
 
 | Job | Activates when | Runs |
 | --- | --- | --- |
