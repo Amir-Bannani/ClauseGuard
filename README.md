@@ -2,7 +2,6 @@
 
 **NLP-powered contract clause analysis and concern detection.**
 
-[![CI](https://github.com/AdemGhalleb/ClauseGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/AdemGhalleb/ClauseGuard/actions/workflows/ci.yml)
 
 ClauseGuard is a production-oriented NLP system that extracts and classifies individual clauses from contracts, then evaluates those clauses against a documented set of configurable checks to surface *potentially concerning provisions* for human review.
 
