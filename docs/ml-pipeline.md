@@ -108,9 +108,15 @@ Metrics are computed on the held-out test set only. The validation set is used f
 
 ### Leakage and Splitting
 
-- LEDGAR provisions originate from source contracts (identified by `source` document fields — see [dataset.md](dataset.md)).
-- Provisions from the same source contract must be kept together when splitting. **Document-level splitting is a hard requirement**, not an option.
-- Where the dataset ships with a chronology (as the LexGLUE formulation does — see [dataset.md](dataset.md)), we will evaluate on the chronological test split and additionally assess whether document-level grouping is sufficient to control leakage in our preprocessing.
+- The original LEDGAR corpus has source contracts, but the inspected LexGLUE
+  package exposes only `text` and `label`; it has no source-document field (see
+  [dataset.md](dataset.md)).
+- If source identifiers are obtained, provisions from the same source contract
+  must be kept together. **Document-level splitting remains a hard
+  requirement** for any evaluation setup where such identifiers are available.
+- We will use the provided chronological splits and report their exact-text
+  overlap. Source-level grouping cannot be verified until a source with
+  contract IDs is selected.
 - If a naive per-provision random split looks better than a document-grouped split, that difference is *evidence of leakage risk*, not a reason to prefer the optimistic number.
 
 ### Metrics

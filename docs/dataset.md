@@ -49,11 +49,16 @@ LEDGAR is released as JSONL; each line is a JSON object with (in the original re
 }
 ```
 
-For ClauseGuard's experiments the important fields are:
+The original LEDGAR release contains fields such as `provision`, `label`, and
+`source`. The LexGLUE package is a task-specific reformulation and its actual
+fields must be treated as authoritative for our experiments.
+
+For ClauseGuard's experiments, the important conceptual fields are:
 
 - the **provision text** (the input),
 - the **label** (the target class),
-- the **source** (the originating contract — used for document-level grouping and leakage control).
+- the originating **source** contract when it is available (used for
+  document-level grouping and leakage control).
 
 ## What Labels Represent
 
@@ -74,9 +79,12 @@ Multiple provisions frequently originate from the same contract. This creates a 
 
 ClauseGuard treats this seriously:
 
-1. **Document-level grouping.** The `source` field identifies the originating contract. Provisions from the same source must stay within the same split.
+1. **Document-level grouping.** When a source-contract identifier is available, provisions from the same source must stay within the same split.
 2. **Chronological split.** The LexGLUE LEDGAR split is chronological (train 2016–2017, dev 2018, test 2019). This reduces temporal leakage and is closer to how a deployed system behaves (trained on the past, evaluated forward).
-3. **Verification.** After preprocessing, we will verify that no source contract appears in both training and validation/test sets, and we will report on this explicitly in the experiment write-ups.
+3. **Verification.** If source IDs are obtained, we will verify that no source
+   contract appears in both training and validation/test sets, and report it in
+   experiment write-ups. This verification is not possible from the current
+   two-column LexGLUE package alone.
 4. **Skeptical reading.** If a per-provision random split ever looks better than the document-grouped split, that gap is treated as evidence of leakage risk — not as a better result.
 
 We prioritize trustworthy evaluation over an impressive-looking metric.
@@ -102,7 +110,70 @@ Only statistics verified against the original papers are listed here. Anything e
 | LexGLUE LEDGAR subset — labels | 100 most frequent | Chalkidis et al., ACL 2022 |
 | LexGLUE LEDGAR subset — train / dev / test | 60k / 10k / 10k (chronological) | Chalkidis et al., ACL 2022 |
 
-Exact split sizes, per-class distributions, and preprocessing statistics for the specific files we download are `TBD` and will be recorded after the dataset is loaded and inspected.
+Exact split sizes, per-class distributions, and preprocessing statistics for the specific files we download are recorded below.
+
+## Local inspection results — 2026-09-20
+
+These are factual observations from running
+`ml/src/inspect_dataset.py` against `coastalcph/lex_glue`, configuration
+`ledgar`. They are not preprocessing or modelling decisions.
+
+Run it from the repository root with `python -m pip install -r
+requirements.txt` followed by `python ml/src/inspect_dataset.py`. The script
+uses Hugging Face's cache and accepts a fixed sampling seed by default.
+
+### Actual schema and splits
+
+The dataset contains `train` (60,000 examples), `validation` (10,000), and
+`test` (10,000), for 80,000 examples in total. Every split has exactly two
+columns:
+
+- `text`: `Value("string")`
+- `label`: a `ClassLabel` integer with 100 named categories
+
+Notably, the LexGLUE package does **not** expose the original LEDGAR `source`
+field. Consequently, contract-level grouping and source-based leakage checks
+cannot be performed from this package as loaded; this is an unresolved
+evaluation-design issue, not evidence that there is no document-level leakage.
+
+### Observed distribution
+
+All 100 declared categories occur across the supplied splits. The aggregate
+class distribution is strongly imbalanced: the smallest category is `Books`
+with 25 examples, the largest is `Governing Laws` with 4,243, and the median
+class size is 562.5. The full, reproducible sorted table is printed by the
+inspection script; it is deliberately not a category-selection recommendation.
+
+### Observed text lengths
+
+The script uses raw character counts and a whitespace-delimited word
+approximation (not a model tokenizer). Across all 80,000 texts:
+
+| Measure | Characters | Words (approx.) |
+| --- | ---: | ---: |
+| Minimum | 22 | 3 |
+| Mean | 701.9 | 113.0 |
+| Median | 525.0 | 84.0 |
+| P90 | 1,444.0 | 233.0 |
+| P95 | 1,884.0 | 302.0 |
+| P99 | 2,931.0 | 470.0 |
+| Maximum | 7,803 | 1,215 |
+
+### Exact text duplication and split overlap
+
+There are 80,000 unique raw text strings: no exact duplicate texts occur
+anywhere in the package. As a result, exact-text intersections for train/test,
+train/validation, and validation/test are all zero. This only rules out exact
+string duplication; near-duplicates and contract-level leakage remain separate
+questions.
+
+### Future decisions — not made yet
+
+- Whether to use all 100 labels or an explicitly documented smaller taxonomy.
+- How to handle rare labels, if at all, after evaluation goals are agreed.
+- What normalization, if any, is appropriate.
+- A source that supplies contract IDs if document-level leakage control is a
+  requirement for the eventual evaluation setup.
 
 ## References
 
