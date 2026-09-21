@@ -1,8 +1,31 @@
 # ML Pipeline
 
-This document describes the planned machine-learning pipeline for ClauseGuard's first task: supervised multi-class classification of contract provisions into clause categories.
+This document describes the machine-learning pipeline for ClauseGuard's first task: supervised multi-class classification of contract provisions into clause categories.
 
-> **Important:** No experiments have been run yet. Every result in this document is a placeholder (`TBD`) and will be filled in with real numbers as experiments are executed. We will not publish fabricated or premature results.
+> **Status:** The dataset audit and evaluation infrastructure phase is complete
+> (see [dataset.md](dataset.md) and [evaluation.md](evaluation.md)). No
+> classifier has been trained yet; every model result in this document is still
+> `TBD` and will be filled in with real numbers as experiments are executed. We
+> will not publish fabricated or premature results.
+
+## Shared evaluation harness
+
+All classifiers (the TF-IDF baseline and any later transformer) are evaluated
+with one small, model-agnostic harness in `ml/src/evaluation/`:
+
+- `classification_metrics` — accuracy, macro-F1 (primary), weighted-F1.
+- `per_class_metrics` — per-class precision / recall / F1 / support.
+- `top_k_metrics` — top-1 / top-3 / top-5 accuracy from probability **or**
+  decision-score arrays (`LogisticRegression.predict_proba` and
+  `LinearSVC.decision_function` work with the same call).
+- `confusion_matrix_data` / `top_confused_pairs` — full 100×100 confusion
+  matrix and sorted top-N confused label pairs.
+- `ExperimentMetadata` / `EvaluationResult` — structured, JSON-serializable
+  experiment records (model, dataset revision, configuration, seed, and an
+  optional `git_commit` that never breaks CI when unavailable).
+
+The evaluation protocol and metric rationale are defined in
+[evaluation.md](evaluation.md).
 
 ## Task
 
@@ -29,6 +52,25 @@ flowchart LR
     SEL --> EXP[Model export / ONNX]
     EXP --> SERVE[Inference service]
 ```
+
+## Dataset Audit (done)
+
+Before any modelling, the cached dataset was audited:
+
+- `ml/src/audit_labels.py` — label metadata, 100-class support table, rare-class
+  buckets, representative examples.
+- `ml/src/audit_leakage.py` — raw + normalized exact overlap, TF-IDF
+  near-duplicate similarity (fit on train only, sparse batched), top-100
+  suspicious pairs, similarity buckets.
+- `ml/src/normalization.py` — conservative deterministic normalization
+  preserving digits and legal tokens.
+
+Empirical findings are recorded in [dataset.md](dataset.md). Generated reports
+live in `ml/reports/` (gitignored). The audit confirmed: all 100 classes are
+present and strongly imbalanced; raw exact-text overlap between splits is zero,
+but normalized exact matches (boilerplate) and very high TF-IDF similarity
+(≈5% of validation/test ≥ 0.9999) are widespread. LexGLUE does not expose
+contract IDs, so document-level splits cannot be verified from this package.
 
 ## Phase 1 — Baseline: TF-IDF + Logistic Regression
 
@@ -104,7 +146,37 @@ Expected outputs:
 
 ## Evaluation Methodology
 
-Metrics are computed on the held-out test set only. The validation set is used for hyperparameter tuning and early stopping; the test set is touched once.
+Metrics are computed with the shared harness (`ml/src/evaluation/`). The
+validation set is used for model comparison, hyperparameter selection, and
+threshold selection; the test set is touched exactly once per frozen model.
+Full discipline and metric rationale: [evaluation.md](evaluation.md).
+
+### Evaluation protocol
+
+1. Fit the vectorizer and classifier on **train only**.
+2. Select the best model/configuration on **validation** using macro-F1
+   (primary), with accuracy, weighted-F1, top-k, and per-class metrics as
+   supporting views.
+3. Produce error analysis (per-class F1, confusion matrix, top confused pairs)
+   on **validation**.
+4. Once frozen, run the chosen model on **test** and record the full metric
+   set and an `EvaluationResult` JSON.
+
+### Similarity-stratified evaluation (future)
+
+The leakage audit stores per-example maximum cosine-similarity-to-train arrays
+and standard buckets (`<0.50`, `0.50–0.80`, `0.80–0.90`, `0.90–0.95`,
+`0.95–0.98`, `>=0.98`) in `ml/reports/`. After the baseline exists, evaluation
+metrics will be reported per bucket to show which provisions the model truly
+generalises to versus memorises from near-duplicate boilerplate. This is
+diagnostic context, **not** a model-selection criterion.
+
+### Abstention / calibration analysis (future)
+
+After model probabilities are available, we will evaluate calibration (ECE) and
+confidence-based abstention for the drafting-assistant use case. These are
+production-oriented and intentionally deferred until the baseline's output
+representation is known (see [evaluation.md](evaluation.md)).
 
 ### Leakage and Splitting
 

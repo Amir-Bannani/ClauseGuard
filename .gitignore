@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ML generated reports and artifacts
+ml/artifacts/
+ml/reports/
+
+# Large generated numerical array audit outputs
+*.npy

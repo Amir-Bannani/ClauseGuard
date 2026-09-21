@@ -175,6 +175,104 @@ questions.
 - A source that supplies contract IDs if document-level leakage control is a
   requirement for the eventual evaluation setup.
 
+## Audit results — 2026-09-21
+
+These are actual empirical findings from running the audit scripts shipped in
+this repository against the locally cached dataset:
+
+- `python ml/src/audit_labels.py`
+- `python ml/src/audit_leakage.py`
+
+The scripts reproduce and supersede parts of the manual inspection above. Full
+machine-readable outputs are written to `ml/reports/`, which is gitignored.
+
+### A1/A4 — Label distribution and rare classes
+
+All 100 `ClassLabel` categories occur across the supplied splits with 80,000
+examples total (train 60,000, validation 10,000, test 10,000). Support is
+extremely imbalanced: `Governing Laws` is the most frequent class (4,243) and
+`Books` the rarest (25).
+
+| Total-support bucket | Classes | Train | Val | Test | Total | Share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `<50` | 2 | 54 | 3 | 6 | 63 | 0.08% |
+| `50–99` | 1 | 47 | 8 | 5 | 60 | 0.07% |
+| `100–249` | 7 | 1,001 | 167 | 144 | 1,312 | 1.64% |
+| `250–499` | 32 | 9,553 | 1,580 | 1,558 | 12,691 | 15.86% |
+| `500+` | 58 | 49,345 | 8,242 | 8,287 | 65,874 | 82.34% |
+
+The three rarest classes, all with total support below 100:
+
+- `Books` (ID 14): total 25 (train 23, val 0, test 2)
+- `Assigns` (ID 8): total 38 (train 31, val 3, test 4)
+- `Qualifications` (ID 72): total 60 (train 47, val 8, test 5)
+
+Macro-F1 will be dominated by these tiny classes, so single-class numbers for
+them should be read carefully. No class was merged, removed, resampled, or
+rebalanced for this audit; the dataset is reported as-is.
+
+### B1 — Exact overlap
+
+Raw exact-text overlap is zero for every split pair (consistent with 80,000
+unique raw `text` strings). After conservative normalization (NFKC, casefold,
+whitespace/quote/dash unification — digits preserved) exact matches appear:
+
+| Split pair | Normalized matches | Unique A | Unique B |
+| --- | ---: | ---: | ---: |
+| train ↔ validation | 330 | 315 | 295 |
+| train ↔ test | 372 | 343 | 314 |
+| validation ↔ test | 84 | 79 | 79 |
+
+These are short boilerplate provisions (e.g. Governing Laws, Counterparts,
+Waiver Of Jury Trials) that recur across contracts differing only in casing,
+whitespace, or punctuation. All representative normalized matches share the
+same label.
+
+**Important limitation:** the LexGLUE package exposes only `text` and `label`;
+it does **not** expose the original LEDGAR `source`/contract identifier.
+Consequently, contract-level split independence cannot be verified from this
+package, and absence of exact overlap is *not* evidence of zero document-level
+leakage.
+
+### B2 — TF-IDF near-duplicate similarity
+
+Diagnostic only. A `TfidfVectorizer(lowercase=True, ngram_range=(1, 2),
+min_df=2, sublinear_tf=True, dtype=float32)` was fit **on the training split
+only**; each validation/test example was compared to all training examples
+(sparse, batched) and only its maximum cosine similarity was retained.
+
+| Metric | Validation → Train | Test → Train |
+| --- | ---: | ---: |
+| Min | 0.087 | 0.104 |
+| Mean | 0.640 | 0.638 |
+| Median | 0.675 | 0.671 |
+| P90 | 0.972 | 0.973 |
+| P95 | 0.997 | 1.000 |
+| P99 | 1.000 | 1.000 |
+| Max | 1.000 | 1.000 |
+
+Proportion of examples at or above a cosine threshold:
+
+| Threshold | Validation | Test |
+| --- | ---: | ---: |
+| ≥ 0.80 | 35.8% | 36.7% |
+| ≥ 0.90 | 22.6% | 23.0% |
+| ≥ 0.95 | 13.9% | 14.5% |
+| ≥ 0.98 | 8.2% | 8.6% |
+
+Approximately 4.9% of validation and 5.1% of test examples reach cosine
+similarity ≥ 0.9999 to a training example — effectively duplicate TF-IDF
+vectors, i.e. same token content with only cosmetic textual differences. All
+top-100 highest-similarity validation pairs (and 99 of the top-100 test pairs)
+share the same label as their nearest training example.
+
+These thresholds are **diagnostic only** and are not claimed to be definitive
+"leakage". The strong near-duplicate presence reflects recurring legal
+boilerplate across SEC-filed contracts and the chronological split does not
+prevent it. The full distributions, buckets, per-example similarity arrays, and
+top-100 suspicious pairs are stored under `ml/reports/` for the future
+similarity-stratified analysis.
+
 ## References
 
 - Don Tuggener, Pius von Däniken, Thomas Peetz, Mark Cieliebak. *LEDGAR: A Large-Scale Multi-label Corpus for Text Classification of Legal Provisions in Contracts.* LREC 2020.
@@ -182,4 +280,7 @@ questions.
 
 ## Next Step
 
-Load and inspect the dataset (Milestone 1 in [roadmap.md](roadmap.md)) before writing any classifier.
+The dataset is inspected and audited (see [Audit results](#audit-results--2026-09-21) above
+and [evaluation.md](evaluation.md)). The next phase implements the TF-IDF +
+Logistic Regression / LinearSVC baseline and evaluates it with the shared
+harness in `ml/src/evaluation/`.
