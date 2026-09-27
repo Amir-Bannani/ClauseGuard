@@ -66,6 +66,13 @@ def test_macro_and_weighted_f1() -> None:
     assert result["weighted_f1"] == pytest.approx((4 / 5 * 3 + 2 / 3 * 1 + 1 * 2) / 6)
 
 
+def test_macro_f1_can_include_zero_support_classes() -> None:
+    # The fixed label set keeps all 100 LEDGAR classes in the macro average,
+    # including a label with no validation examples or predictions.
+    result = classification_metrics([0, 1], [0, 1], labels=[0, 1, 2])
+    assert result["macro_f1"] == pytest.approx(2 / 3)
+
+
 def test_zero_division_handling() -> None:
     # Class 2 never appears in predictions; with zero_division=0 its F1 is 0.
     y_true = [0, 0, 1, 1]
