@@ -1,109 +1,106 @@
-# Evaluation
+# Evaluation protocol and results
 
-This document defines ClauseGuard's evaluation protocol for the LEDGAR
-clause-categorization task. It covers split discipline, the metric set, the
-shared evaluation harness, and the extension points planned for later phases.
+This document defines the LEDGAR split discipline and metrics used by the
+TF-IDF baseline. The reusable implementation is under `ml/src/evaluation/`.
 
 ## Split discipline
 
-The LexGLUE LEDGAR package ships three predetermined splits
-(60,000 / 10,000 / 10,000, chronological by filing year). We treat them as
-strict, non-interchangeable roles:
+LexGLUE `coastalcph/lex_glue`, configuration `ledgar`, supplies predetermined
+chronological splits: 60,000 train, 10,000 validation, and 10,000 test
+examples. They have fixed roles:
 
 ```text
-TRAIN      -> fitting only
-VALIDATION -> model comparison, hyperparameter selection,
-              threshold selection, error analysis
-TEST       -> final held-out evaluation
+TRAIN      -> fit the vectorizer and classifier
+VALIDATION -> select hyperparameters/models and perform error analysis
+TEST       -> evaluate the frozen configuration once
 ```
 
-Rules:
+The baseline CLI loads train and validation only for tuning and diagnostics.
+The final command loads train and test only after the configuration is
+selected. TF-IDF is fit on train only. Similarity-to-training values are
+diagnostic and never model inputs or selection criteria. Test results are
+reported without subsequent tuning.
 
-- Fit anything (vectorizers, imputation, class priors) only on `train`.
-- Use `validation` for model comparison, hyperparameter selection, and any
-  threshold tuning. This is the *development set*.
-- The **test set must never be used for model selection** of any kind: no
-  hyper-parameter choice, no threshold decision, no early stopping criterion
-  based on test scores. It is evaluated exactly once per model, after the
-  model and its configuration are frozen.
-- Error analysis (confusion matrices, per-class failures) is performed on
-  `validation`. Inspecting test errors for *reporting* is fine; adapting the
-  model because of them is not.
-- Similarity-to-training features (see the dataset audit) are dropped from the
-  decision process: they are diagnostic context, not model inputs.
+The package exposes no source-contract identifier, so grouping by contract
+cannot be verified. The dataset's chronological split is retained as supplied.
 
 ## Metrics
 
-### Overview
-
-The LEDGAR subset is single-label multiclass with 100 strongly imbalanced
-classes (`Governing Laws` ≈ 4,243 examples; the rarest class has 25). The
-metric set is chosen to represent the model's behaviour honestly under this
-imbalance.
+The task has 100 single-label classes with strong imbalance (largest class:
+Governing Laws, 4,243 examples; smallest: Books, 25). Macro-F1 is computed over
+the fixed set of all 100 class IDs, including a zero score for a class with no
+validation support and no predictions.
 
 | Metric | Role |
 | --- | --- |
-| Macro-F1 | **Primary.** Averages per-class F1 equally, so frequent classes cannot dominate. |
-| Accuracy | Overall share of correctly classified provisions. Intuitive but dominated by frequent classes. |
-| Weighted-F1 | F1 averaged with each class weighted by its support; closer to "expected F1 over a random provision". |
-| Per-class P / R / F1 / support | Diagnosis: shows which classes the model can and cannot separate. |
-| Top-k accuracy (k=1,3,5) | Ratio of examples whose true class is within the top-k predictions. Useful for exploratory/assistive clause categorization. |
-| Confusion matrix | Full 100×100 matrix plus top-N confused true/predicted pairs. |
+| Macro-F1 | Primary selection criterion; averages F1 equally over all 100 labels. |
+| Accuracy | Overall top-1 correctness. |
+| Weighted-F1 | F1 averaged by class support. |
+| Per-class precision, recall, F1, support | Shows class-specific strengths and weaknesses. |
+| Top-1 / top-3 / top-5 | True class rank from probabilities or real-valued class scores. |
+| Confusion matrix and top confused pairs | Full 100×100 matrix and largest off-diagonal errors. |
 
-### Why macro-F1 is the primary metric
+For single-label multiclass data, micro-F1 equals accuracy and is omitted as a
+redundant metric. Logistic Regression top-k uses `predict_proba`; LinearSVC
+top-k uses `decision_function` and is a ranking measure, not a calibrated
+probability.
 
-Macro-F1 treats every class as equally important. With extreme class
-imbalance, a model can reach high accuracy by memorising frequent classes and
-ignoring rare ones; macro-F1 makes that failure visible and is the number we
-care most about. All model-selection decisions will be made using
-`validation` macro-F1 first.
+The implementation in `metrics.py` uses sklearn metric functions and accepts a
+fixed label list for macro-F1 and per-class reports. This ensures a class with
+zero support does not silently disappear from the primary metric.
 
-### Micro-F1 is intentionally not reported as a primary metric
+## Selected baseline results
 
-For single-label multiclass classification, micro-F1 and accuracy are equal by
-construction, so reporting both as primary metrics would display redundant
-information. Accuracy is kept because it is the more familiar formulation of
-the same quantity.
+All selection below used validation only. The highest tested macro-F1 was
+LinearSVC (`C=3`, no class weighting): accuracy 0.8828, macro-F1 0.8194,
+weighted-F1 0.8795, top-3 0.9535, and top-5 0.9660. It was selected over the
+strongest Logistic Regression configuration (`C=10`, no class weighting;
+macro-F1 0.8068). The full C grids and comparison are in
+[ml-pipeline.md](ml-pipeline.md).
 
-### Top-k for exploratory categorization
+The selected configuration was then evaluated once on the untouched test
+split: accuracy 0.8797, macro-F1 0.8299, weighted-F1 0.8757, top-3 0.9506,
+and top-5 0.9621. Test metrics did not change the configuration.
 
-Top-k answers a practical question for a *drafting assistant*: "is the correct
-class among the top-k suggestions?" It uses the same score arrays (probabilities
-or decision scores) and costs nothing extra. It is a secondary metric; the
-primary decision metric remains macro-F1.
+## Error analysis and similarity diagnostics
 
-## Shared evaluation harness
+Error analysis was performed on validation for Logistic Regression `C=10`,
+unweighted, before comparing LinearSVC. The largest confusion was Applicable
+Laws → Governing Laws (50 cases); other recurring pairs included Defined
+Terms/Definitions, Tax Withholdings/Withholdings, and No Waivers/Waivers.
+Accuracy ranged from 0.8427 in clauses under 200 characters to 0.9254 in the
+smallest-by-count longest-text bucket (≥2,000 characters, n=389).
 
-The harness lives in `ml/src/evaluation/` and is small and model-agnostic:
+Validation accuracy increased from 0.7634 for 3,445 examples with similarity
+below 0.50 to 0.9816 for 816 examples at or above 0.98. Existing leakage audits
+found many high-similarity and normalized exact overlaps between the supplied
+splits. Similarity-stratified metrics are diagnostic context, not a selection
+criterion or proof of causal memorization.
 
-- `metrics.py` — `classification_metrics`, `per_class_metrics`,
-  `top_k_metrics`, `confusion_matrix_data`, `top_confused_pairs`.
-  Top-k accepts either probability arrays or decision-score arrays, so
-  `LogisticRegression` and `LinearSVC` can be evaluated with the same call.
-- `metadata.py` — `ExperimentMetadata` (model name/version, dataset,
-  revision, split, configuration, seed, optional `git_commit`) and
-  `EvaluationResult` (structured, JSON-serializable via `to_json`).
+Generated JSON/Markdown reports contain complete per-class results, confusion
+matrices, high-confidence errors, and length/similarity buckets under
+`ml/reports/baseline/`; generated reports are gitignored.
 
-Both the TF-IDF baseline and any transformer use this harness and the
-`git_commit` from `resolve_git_commit` (best-effort; never fails CI).
+## Experiment metadata and artifacts
 
-## Extension points (future, not yet implemented)
+`ExperimentMetadata` records model name/version, dataset and cached revision,
+split, configuration, seed, and optional Git commit. `EvaluationResult`
+stores metrics, per-class values, top-k scores, the full confusion matrix, and
+top confused pairs. `resolve_git_commit` is best-effort and never blocks
+execution.
 
-These are intentionally deferred until the first baseline defines exactly how
-model outputs are represented:
+The selected sklearn artifact contains the fitted vectorizer and classifier
+together. Reports and model files are local generated outputs and are not
+committed.
 
-- **Calibration / ECE** — useful when confidence is presented to end users.
-  Deferred: needs the chosen model's probability semantics.
-- **Confidence-based abstention** — allowing the tool to decline low-confidence
-  predictions (a drafting assistant benefits from "I'm not sure over a wrong
-  guess"). Deferred: needs calibrated probabilities and a product decision on
-  the abstention gate.
-- **Similarity-stratified evaluation** — analysing model performance within
-  cosine-similarity buckets to the training data (see the leakage audit
-  artifacts: `<0.50`, `0.50–0.80`, `0.80–0.90`, `0.90–0.95`, `0.95–0.98`,
-  `>=0.98`). This tells us *which* provisions the model actually generalises vs.
-  memorises. Deferred: the bucket scripts and per-bucket metric reporting will be
-  added alongside the baseline so the format matches real model outputs.
+## Known limitations
 
-None of these become part of the harness architecture until the first baseline
-exists.
+- LEDGAR labels are imbalanced and single-label even when a clause contains
+  several topics.
+- Some categories have near-overlapping names and content; label boundaries
+  need domain review.
+- No source-contract IDs are exposed by the packaged dataset, so
+  contract-level leakage cannot be ruled out.
+- Results are specific to this SEC-contract-derived dataset and its supplied
+  chronological split.
+- LinearSVC scores are not calibrated probabilities.

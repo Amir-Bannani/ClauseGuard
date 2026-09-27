@@ -1,211 +1,224 @@
-# ML Pipeline
+# LEDGAR TF-IDF baseline
 
-This document describes the machine-learning pipeline for ClauseGuard's first task: supervised multi-class classification of contract provisions into clause categories.
+## Experiment status
 
-> **Status:** The dataset audit and evaluation infrastructure phase is complete
-> (see [dataset.md](dataset.md) and [evaluation.md](evaluation.md)). No
-> classifier has been trained yet; every model result in this document is still
-> `TBD` and will be filled in with real numbers as experiments are executed. We
-> will not publish fabricated or premature results.
+The first classifier experiment is complete. It compares word TF-IDF with
+multiclass Logistic Regression and LinearSVC on all 100 LexGLUE LEDGAR labels.
+The selected configuration is LinearSVC with `C=3` and no class weighting,
+chosen using validation macro-F1. It was evaluated once on the held-out test
+split after selection. No transformer was trained.
 
-## Shared evaluation harness
+## Data and split protocol
 
-All classifiers (the TF-IDF baseline and any later transformer) are evaluated
-with one small, model-agnostic harness in `ml/src/evaluation/`:
+- Dataset: `coastalcph/lex_glue`, configuration `ledgar`.
+- Cached dataset revision: `0.0.0`; the supplied chronological splits contain
+  60,000 train, 10,000 validation, and 10,000 test examples.
+- All 100 labels are preserved. No labels were merged or removed, and no
+  resampling or synthetic examples were used.
+- The largest class is Governing Laws (4,243 examples); the smallest is Books
+  (25). The validation split has no Books examples. Macro-F1 therefore uses
+  the fixed 100-label set, assigning zero F1 to a class with no validation
+  support and no predictions.
+- Tuning and error-analysis commands load only train and validation. The final
+  command loads train and test after the selection is frozen. The vectorizer
+  is fit on train only in every run.
 
-- `classification_metrics` — accuracy, macro-F1 (primary), weighted-F1.
-- `per_class_metrics` — per-class precision / recall / F1 / support.
-- `top_k_metrics` — top-1 / top-3 / top-5 accuracy from probability **or**
-  decision-score arrays (`LogisticRegression.predict_proba` and
-  `LinearSVC.decision_function` work with the same call).
-- `confusion_matrix_data` / `top_confused_pairs` — full 100×100 confusion
-  matrix and sorted top-N confused label pairs.
-- `ExperimentMetadata` / `EvaluationResult` — structured, JSON-serializable
-  experiment records (model, dataset revision, configuration, seed, and an
-  optional `git_commit` that never breaks CI when unavailable).
+The full class-support audit is in the ignored generated artifacts under
+`ml/reports/`. The dataset package exposes no source-contract identifier, so
+contract-level split separation cannot be verified. Existing audits also found
+normalized exact overlaps and high TF-IDF similarity across the supplied
+splits; similarity is reported as diagnostic context, not used for selection.
 
-The evaluation protocol and metric rationale are defined in
-[evaluation.md](evaluation.md).
+## Pipeline
 
-## Task
+`ml/src/data_loader.py` reads the cached Arrow files when available and loads
+only requested splits. `ml/src/baseline.py` defines the vectorizer, classifiers,
+training grids, prediction scoring, evaluation, metadata, and CLI. The fitted
+vectorizer and classifier are saved together as one sklearn `Pipeline`.
+`ml/src/error_analysis.py` produces validation-only diagnostic artifacts.
+Metrics and result structures come from `ml/src/evaluation/`.
 
-Given a contract provision (a clause/paragraph of text), predict its clause category.
+### TF-IDF
 
-- Problem type: supervised multi-class text classification
-- Primary metric: **macro-F1** (the label distribution is imbalanced; a metric that weighs each class equally is the most honest summary)
-- Supporting metrics: accuracy, macro-/weighted-F1, precision, recall, per-class F1, confusion matrix
-
-## Pipeline Overview
-
-```mermaid
-flowchart LR
-    DS[Dataset] --> PRE[Preprocessing]
-    PRE --> SPLIT[Train / validation / test split]
-    SPLIT --> BASE[TF-IDF + Logistic Regression]
-    BASE --> EVAL[Evaluation]
-    EVAL --> EA1[Error analysis]
-    SPLIT --> TF[Transformer-based classifier]
-    TF --> FT[Fine-tuning]
-    FT --> EVAL2[Evaluation & comparison]
-    EVAL2 --> EA2[Error analysis]
-    EVAL2 --> SEL[Model selection]
-    SEL --> EXP[Model export / ONNX]
-    EXP --> SERVE[Inference service]
+```python
+TfidfVectorizer(
+    ngram_range=(1, 2),
+    min_df=2,
+    sublinear_tf=True,
+    dtype=np.float32,
+    lowercase=True,
+)
 ```
 
-## Dataset Audit (done)
+No stop words are removed, and no stemming, lemmatization, or custom text
+normalization is applied. Lowercasing is performed by the vectorizer; legal
+tokens such as “shall”, “may”, “not”, “unless”, and “provided” remain available.
+The audit reports a 173,477-term vocabulary under these settings.
 
-Before any modelling, the cached dataset was audited:
+### Logistic Regression
 
-- `ml/src/audit_labels.py` — label metadata, 100-class support table, rare-class
-  buckets, representative examples.
-- `ml/src/audit_leakage.py` — raw + normalized exact overlap, TF-IDF
-  near-duplicate similarity (fit on train only, sparse batched), top-100
-  suspicious pairs, similarity buckets.
-- `ml/src/normalization.py` — conservative deterministic normalization
-  preserving digits and legal tokens.
+Multinomial `LogisticRegression` with L2 penalty, `lbfgs`, `max_iter=2000`,
+`tol=1e-3`, and seed `20260922`. The tolerance was relaxed from sklearn's
+default after full-data pilot fits showed that stricter optimization took
+substantially longer; the final grid records convergence and iteration counts.
+The controlled validation grid was:
 
-Empirical findings are recorded in [dataset.md](dataset.md). Generated reports
-live in `ml/reports/` (gitignored). The audit confirmed: all 100 classes are
-present and strongly imbalanced; raw exact-text overlap between splits is zero,
-but normalized exact matches (boilerplate) and very high TF-IDF similarity
-(≈5% of validation/test ≥ 0.9999) are widespread. LexGLUE does not expose
-contract IDs, so document-level splits cannot be verified from this package.
-
-## Phase 1 — Baseline: TF-IDF + Logistic Regression
-
-The first experiment is a classical, cheap, and interpretable baseline. Its purpose is to establish a reference point for clause classification before introducing a transformer.
-
-Steps:
-
-1. Preprocess LEDGAR provision text (exact normalization steps TBD after dataset inspection).
-2. Convert text to TF-IDF features.
-3. Train a logistic regression classifier.
-4. Evaluate with the documented metric set.
-5. Perform error analysis: examine per-class F1, the confusion matrix, and representative misclassified provisions.
-
-Expected outputs:
-
-| Artifact | Status |
+| C | class_weight |
 | --- | --- |
-| Preprocessing + feature pipeline | Planned |
-| Baseline model checkpoint | Planned |
-| Evaluation report (macro-F1, per-class F1, confusion matrix) | TBD — after experiments |
-| Error analysis notes | TBD — after experiments |
+| 1, 3, 10, 30, 100 | `None`, `balanced` |
 
-## Phase 2 — Transformer-based Classifier
+### LinearSVC
 
-The baseline is compared against a fine-tuned transformer classifier.
+L2 penalty, squared-hinge loss, `dual="auto"`, `max_iter=5000`, `tol=1e-4`,
+seed `20260922`, and `class_weight=None`. The validation grid was
+`C ∈ {0.1, 0.3, 1, 3}`. It uses the same TF-IDF parameters and training split.
+Top-k rankings use `decision_function` scores; these scores are not calibrated
+probabilities.
 
-Candidate models: DistilBERT or a legal-domain transformer (for example, a LegalBERT variant). **The choice is not decided in advance** — it will be selected based on experimentation, development-set performance, and practical constraints (size, latency, qualitative error analysis).
+## Validation results
 
-Steps:
+Macro-F1 is computed over all 100 class IDs. Accuracy and weighted-F1 are
+supporting metrics. Every fit below converged. Top-k values for LinearSVC are
+based on decision-score ranking.
 
-1. Tokenize provisions with the chosen tokenizer.
-2. Fine-tune the transformer classifier.
-3. Evaluate with the same metric set as the baseline.
-4. Error analysis: compare failure patterns against the baseline (e.g., which classes the transformer fixes vs. still gets wrong).
-5. Model selection: transformer chosen only if the improvement justifies its cost (size, inference latency, complexity).
+### Logistic Regression
 
-Expected outputs:
+| C | class weight | Accuracy | Macro-F1 | Weighted-F1 | Top-3 | Top-5 | Iterations |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | none | 0.8385 | 0.7448 | 0.8288 | 0.9489 | 0.9689 | 36 |
+| 1 | balanced | 0.8364 | 0.7766 | 0.8397 | 0.9524 | 0.9743 | 30 |
+| 3 | none | 0.8628 | 0.7869 | 0.8570 | 0.9615 | 0.9786 | 50 |
+| 3 | balanced | 0.8517 | 0.7931 | 0.8541 | 0.9605 | 0.9784 | 40 |
+| 10 | none | 0.8761 | **0.8068** | 0.8726 | 0.9656 | 0.9804 | 71 |
+| 10 | balanced | 0.8522 | 0.7948 | 0.8548 | 0.9609 | 0.9772 | 37 |
+| 30 | none | 0.8636 | 0.7907 | 0.8597 | 0.9646 | 0.9805 | 57 |
+| 30 | balanced | 0.8630 | 0.8033 | 0.8631 | 0.9628 | 0.9805 | 47 |
+| 100 | none | 0.8628 | 0.7928 | 0.8601 | 0.9646 | 0.9792 | 56 |
+| 100 | balanced | 0.8539 | 0.7918 | 0.8553 | 0.9617 | 0.9778 | 46 |
 
-| Artifact | Status |
-| --- | --- |
-| Fine-tuning pipeline | Planned |
-| Fine-tuned model checkpoint | TBD |
-| Comparison table vs. baseline | TBD — after experiments |
-| Selected model + rationale | TBD — after experiments |
+Balanced weighting improved macro-F1 at C=1 and C=30, but reduced it at C=3,
+10, and 100. It was not a consistent improvement.
 
-## Phase 3 — Model Export and Serving
+### LinearSVC
 
-The selected trained model becomes a deployable artifact:
+| C | Accuracy | Macro-F1 | Weighted-F1 | Top-3 | Top-5 | Iterations |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 0.1 | 0.8575 | 0.7712 | 0.8469 | 0.9612 | 0.9747 | 13 |
+| 0.3 | 0.8750 | 0.7994 | 0.8679 | 0.9607 | 0.9742 | 21 |
+| 1 | 0.8835 | 0.8185 | 0.8788 | 0.9580 | 0.9707 | 48 |
+| 3 | 0.8828 | **0.8194** | 0.8795 | 0.9535 | 0.9660 | 129 |
 
-```text
-trained model
-→ export / optimization
-→ model.onnx
-→ ML Docker image
-→ inference service
+The full per-class scores, confusion matrices, top confused pairs, fit times,
+and configuration metadata are written to ignored JSON/Markdown artifacts in
+`ml/reports/baseline/` when the commands below are run.
+
+## Selection and final held-out results
+
+The configuration selected under this protocol is LinearSVC, `C=3`,
+`class_weight=None`. Its validation macro-F1 of 0.8194 was the highest among the
+tested configurations. It exceeded the strongest Logistic Regression result
+(C=10, no class weighting; 0.8068) by 0.0126. LinearSVC at C=1 had slightly
+higher top-3 and top-5 accuracy, but macro-F1 was the predeclared selection
+criterion.
+
+After selection, the pipeline was fit on train and evaluated once on test:
+
+| Metric | Test result |
+| --- | ---: |
+| Accuracy / Top-1 | 0.8797 |
+| Macro-F1 (100 labels) | 0.8299 |
+| Weighted-F1 | 0.8757 |
+| Top-3 accuracy | 0.9506 |
+| Top-5 accuracy | 0.9621 |
+
+The held-out result is reported for the frozen configuration and was not used
+to alter model selection. The per-class test metrics, full 100×100 confusion
+matrix, and top confused pairs are in the generated `test_evaluation.json`.
+The single fitted preprocessing-plus-classifier artifact is
+`ml/artifacts/baseline_linearsvc_c3_0_none.joblib`; model artifacts are
+gitignored.
+
+On test, the weakest F1 values included Applicable Laws (0.30; support 53),
+Assigns (0.40; support 4), Jurisdictions (0.43; support 29), Venues (0.44;
+support 20), and Miscellaneous (0.53; support 79). The largest test confusions
+were Applicable Laws → Governing Laws (31), No Waivers → Waivers (21), Tax
+Withholdings → Withholdings (19), and Definitions → Defined Terms (18). These
+patterns mirror the validation label-boundary confusions. LinearSVC C=3's
+validation macro-F1 advantage over C=1 was only 0.0009, and C=1 had higher
+top-k accuracy; the selected configuration follows the specified macro-F1
+criterion. Test macro-F1 (0.8299) was above validation macro-F1 (0.8194), while
+test accuracy was slightly lower (0.8797 versus 0.8828); this is reported as
+split variation and did not trigger a configuration change.
+
+## Validation error analysis
+
+Diagnostics below use the selected Logistic Regression validation model
+(C=10, unweighted), so confidence can be read as a probability. They were
+completed before the LinearSVC comparison and did not use test examples.
+
+- **Confused pairs:** Applicable Laws → Governing Laws was the most frequent
+  directed error (50). Other recurring pairs included Defined Terms ↔
+  Definitions (17 and 13), Warranties → Representations (17), Tax Withholdings
+  ↔ Withholdings (16 and 14), Authorizations → Authority (15), and No Waivers
+  ↔ Waivers (14 and 14).
+- **Support and class performance:** Assigns had 31 training examples and 3
+  validation examples, with zero recall. Qualifications had 47 training and 8
+  validation examples (F1 0.36). Applicable Laws had 69 validation examples
+  and recall 0.19. Conversely, high-support Counterparts (2,427 train / 429
+  validation) reached F1 0.99, and Governing Laws (3,167 / 494) reached 0.91.
+  Books had no validation examples; its score is zero in the fixed 100-label
+  macro average but does not provide a validation estimate for that class.
+- **Confident errors:** Some high-probability errors appear label-boundary
+  related. For example, validation clauses explicitly about signing in
+  counterparts were labeled Miscellaneous or Effectiveness and predicted as
+  Counterparts. A short No Waivers example was predicted as Waivers. These
+  examples are evidence of overlapping labels in the observed data, not proof
+  that any individual label is wrong.
+- **Clause length:** Accuracy ranged from 0.8427 for texts under 200 characters
+  to 0.9254 for texts at least 2,000 characters. The latter bucket has only
+  389 examples. Intermediate buckets ranged from 0.8733 to 0.8849.
+- **Similarity to train:** Accuracy was 0.7634 for 3,445 validation examples
+  below 0.50 similarity, and 0.9816 for 816 examples at or above 0.98. This is
+  a strong association with similarity; the audit shows that near-duplicate
+  boilerplate is common, so it should not be interpreted as causal evidence of
+  generalization.
+- **Manual review categories:** The inspected examples show semantic label
+  overlap (Applicable Laws/Governing Laws; Defined Terms/Definitions),
+  boilerplate with a clear topic word (counterparts), short text, and clauses
+  combining more than one topic. Possible label noise and genuine model errors
+  remain hypotheses for individual examples; this experiment does not adjudicate
+  them.
+
+Detailed validation examples and all diagnostic tables are in
+`ml/reports/baseline/error_analysis/` (ignored by Git).
+
+## Reproducibility
+
+From the repository root, with `requirements.txt` installed:
+
+```bash
+python -m ml.src.baseline lr-grid
+python -m ml.src.baseline error-analysis --model logreg --C 10 --class-weight none
+python -m ml.src.baseline svc-grid
+python -m ml.src.baseline final --model linearsvc --C 3 --class-weight none
 ```
 
-Steps:
+The final command refuses to overwrite an existing test report. Experiment
+metadata records the seed, dataset/configuration/revision, model version, full
+parameters, split, and best-effort Git commit. Generated reports, cached data,
+and the fitted model are intentionally not committed.
 
-1. Export the trained model to ONNX.
-2. Optimize / quantize where the evaluation supports it (measured trade-offs only).
-3. Measure serving characteristics: inference latency, model size, memory usage.
-4. Wrap `model.onnx` in a minimal inference service (see [architecture.md](architecture.md)).
-5. Validate that the exported model's predictions match the training-time model within an acceptable tolerance.
+## Limitations and next experiment
 
-Expected outputs:
+The dataset's single labels force one category even where clauses discuss
+several topics. Some class names and examples have close semantic boundaries.
+Validation and test contain highly similar provisions, while the package lacks
+contract IDs for source-level split checks. These results therefore describe
+the supplied LexGLUE split and should not be generalized to arbitrary contract
+collections. LinearSVC decision scores are ranking scores, not calibrated
+confidence estimates.
 
-| Artifact | Status |
-| --- | --- |
-| `model.onnx` artifact | TBD |
-| Inference service | Planned (Milestone 4) |
-| Latency / size / memory measurements | TBD — after experiments |
-
-## Evaluation Methodology
-
-Metrics are computed with the shared harness (`ml/src/evaluation/`). The
-validation set is used for model comparison, hyperparameter selection, and
-threshold selection; the test set is touched exactly once per frozen model.
-Full discipline and metric rationale: [evaluation.md](evaluation.md).
-
-### Evaluation protocol
-
-1. Fit the vectorizer and classifier on **train only**.
-2. Select the best model/configuration on **validation** using macro-F1
-   (primary), with accuracy, weighted-F1, top-k, and per-class metrics as
-   supporting views.
-3. Produce error analysis (per-class F1, confusion matrix, top confused pairs)
-   on **validation**.
-4. Once frozen, run the chosen model on **test** and record the full metric
-   set and an `EvaluationResult` JSON.
-
-### Similarity-stratified evaluation (future)
-
-The leakage audit stores per-example maximum cosine-similarity-to-train arrays
-and standard buckets (`<0.50`, `0.50–0.80`, `0.80–0.90`, `0.90–0.95`,
-`0.95–0.98`, `>=0.98`) in `ml/reports/`. After the baseline exists, evaluation
-metrics will be reported per bucket to show which provisions the model truly
-generalises to versus memorises from near-duplicate boilerplate. This is
-diagnostic context, **not** a model-selection criterion.
-
-### Abstention / calibration analysis (future)
-
-After model probabilities are available, we will evaluate calibration (ECE) and
-confidence-based abstention for the drafting-assistant use case. These are
-production-oriented and intentionally deferred until the baseline's output
-representation is known (see [evaluation.md](evaluation.md)).
-
-### Leakage and Splitting
-
-- The original LEDGAR corpus has source contracts, but the inspected LexGLUE
-  package exposes only `text` and `label`; it has no source-document field (see
-  [dataset.md](dataset.md)).
-- If source identifiers are obtained, provisions from the same source contract
-  must be kept together. **Document-level splitting remains a hard
-  requirement** for any evaluation setup where such identifiers are available.
-- We will use the provided chronological splits and report their exact-text
-  overlap. Source-level grouping cannot be verified until a source with
-  contract IDs is selected.
-- If a naive per-provision random split looks better than a document-grouped split, that difference is *evidence of leakage risk*, not a reason to prefer the optimistic number.
-
-### Metrics
-
-- Accuracy
-- Macro-F1 (primary)
-- Weighted-F1
-- Precision / recall
-- Per-class F1
-- Confusion matrix
-- For serving: inference latency, model size, memory usage
-
-All experiment results will be recorded in this repository after they are produced.
-
-## Constraints and Principles
-
-- **No fabricated results.** Every table in this repo will contain either real numbers or explicit `TBD`.
-- **No premature model claims.** We do not know which model wins until the comparison runs.
-- **Comparative evaluation.** Every metric is meaningful only relative to the baseline and the evaluation setup; we report the full context.
-- **Error analysis is a deliverable.** Understanding *why* the model fails is part of accepting the model.
+The next experiment should first review the most-confused label pairs with
+domain guidance, then test one controlled feature change (for example, adding
+character n-grams) against this frozen word-TF-IDF baseline. Keep the same
+train/validation/test protocol and do not tune the completed test result.
