@@ -48,6 +48,7 @@ def _resolve_labels(y_true: Sequence[int], y_pred: Sequence[int]) -> np.ndarray:
 def classification_metrics(
     y_true: Sequence[int],
     y_pred: Sequence[int],
+    labels: Sequence[int] | None = None,
     *,
     zero_division: int = 0,
 ) -> dict[str, float]:
@@ -62,12 +63,20 @@ def classification_metrics(
         "accuracy": float(accuracy_score(y_true_arr, y_pred_arr)),
         "macro_f1": float(
             f1_score(
-                y_true_arr, y_pred_arr, average="macro", zero_division=zero_division
+                y_true_arr,
+                y_pred_arr,
+                labels=labels,
+                average="macro",
+                zero_division=zero_division,
             )
         ),
         "weighted_f1": float(
             f1_score(
-                y_true_arr, y_pred_arr, average="weighted", zero_division=zero_division
+                y_true_arr,
+                y_pred_arr,
+                labels=labels,
+                average="weighted",
+                zero_division=zero_division,
             )
         ),
     }
