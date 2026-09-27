@@ -8,13 +8,13 @@ Planned milestones for ClauseGuard. All milestones are forward-looking; nothing 
 
 **Goal:** Acquire, load, understand, and prepare the LEDGAR dataset.
 
-- [ ] Obtain the LEDGAR subset of LexGLUE
-- [ ] Load and inspect the data structure and label distribution
-- [ ] Analyze class imbalance; document the distribution
-- [ ] Decide whether to use all 100 LexGLUE classes, a subset, or a ClauseGuard-internal label taxonomy
-- [ ] Implement document-aware preprocessing and splitting
-- [ ] Verify no document-level leakage across train/dev/test splits
-- [ ] Document all preprocessing decisions
+- [X] Obtain the LEDGAR subset of LexGLUE
+- [X] Load and inspect the data structure and label distribution
+- [X] Analyze class imbalance; document the distribution
+- [X] Decide whether to use all 100 LexGLUE classes, a subset, or a ClauseGuard-internal label taxonomy
+- [X] Implement document-aware preprocessing and splitting
+- [X] Verify no document-level leakage across train/dev/test splits
+- [x] Document all preprocessing decisions
 
 **Deliverable:** A reproducible data-preparation pipeline with verified split statistics and documented class distribution.
 
@@ -24,12 +24,12 @@ Planned milestones for ClauseGuard. All milestones are forward-looking; nothing 
 
 **Goal:** Train a cheap, interpretable classical baseline for clause classification.
 
-- [ ] Build TF-IDF feature pipeline
-- [ ] Train logistic regression classifier
-- [ ] Evaluate with the full metric set (macro-F1, weighted-F1, accuracy, per-class F1, confusion matrix, precision/recall)
-- [ ] Perform error analysis: which classes are hardest? What do misclassified provisions look like?
-- [ ] Record all results with no fabricated numbers
-- [ ] Establish the document-grouped evaluation as the standard
+- [X] Build TF-IDF feature pipeline
+- [X] Train logistic regression classifier
+- [X] Evaluate with the full metric set (macro-F1, weighted-F1, accuracy, per-class F1, confusion matrix, precision/recall)
+- [X] Perform error analysis: which classes are hardest? What do misclassified provisions look like?
+- [x] Record all results with no fabricated numbers
+- [X] Establish the document-grouped evaluation as the standard
 
 **Deliverable:** A trained baseline model and a complete, documented evaluation report.
 
@@ -72,9 +72,9 @@ Planned milestones for ClauseGuard. All milestones are forward-looking; nothing 
 
 **Goal:** Build the surrounding application: document processing, backend, database, and frontend.
 
-- [ ] Implement PDF text extraction (PyMuPDF)
+- [X] Implement PDF text extraction (PyMuPDF)
 - [ ] Implement DOCX text extraction (python-docx)
-- [ ] Build clause/section segmentation pipeline (expected to be the hardest engineering problem)
+- [ ] Build clause/section segmentation pipeline 
 - [ ] Implement FastAPI backend: auth, document management, upload handling, orchestration, API
 - [ ] Design and implement PostgreSQL schema (users, documents, clauses, analyses, model_versions)
 - [ ] Record the model version used with every analysis
