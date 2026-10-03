@@ -1,0 +1,1 @@
+"""Clause data model."""

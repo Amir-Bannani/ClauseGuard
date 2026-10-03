@@ -1,0 +1,26 @@
+{
+  "id2label": {
+    "0": "confidentiality",
+    "1": "exclusivity",
+    "2": "governing_law",
+    "3": "ip_assignment",
+    "4": "liability_indemnity",
+    "5": "no_solicit_customers",
+    "6": "no_solicit_employees",
+    "7": "non_compete",
+    "8": "other_general",
+    "9": "termination_notice"
+  },
+  "label2id": {
+    "confidentiality": 0,
+    "exclusivity": 1,
+    "governing_law": 2,
+    "ip_assignment": 3,
+    "liability_indemnity": 4,
+    "no_solicit_customers": 5,
+    "no_solicit_employees": 6,
+    "non_compete": 7,
+    "other_general": 8,
+    "termination_notice": 9
+  }
+}

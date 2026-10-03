@@ -1,0 +1,11 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TerminationClauseSchema",
+  "type": "object",
+  "properties": {
+    "notice_period_days": { "type": "integer" },
+    "termination_for_cause": { "type": "boolean" },
+    "termination_without_cause": { "type": "boolean" },
+    "severance_pay": { "type": "string" }
+  }
+}
