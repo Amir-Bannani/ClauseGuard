@@ -1,0 +1,172 @@
+{
+  "document": "aaa.pdf",
+  "total_blocks": 25,
+  "total_nodes": 10,
+  "total_clauses": 8,
+  "tree": [
+    {
+      "id": "heading_1",
+      "parent_id": null,
+      "level": 1,
+      "title": "EMPLOYMENT CONTRACT",
+      "text": "EMPLOYMENT CONTRACT\nThis Employment Contract is made between TechNova Solutions SARL, Tunis, Tunisia (the \"Employer\"), and Ahmed Ben Ali, Tunis, Tunisia (the \"Employee\").",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "1",
+      "parent_id": null,
+      "level": 1,
+      "title": "1. Position",
+      "text": "1. Position\nThe Employee is hired as a Junior Software Developer. The Employee will develop and maintain software applications, assist with technical tasks, and perform other reasonable duties related to the position.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "2",
+      "parent_id": null,
+      "level": 1,
+      "title": "2. Start Date and Duration",
+      "text": "2. Start Date and Duration\nEmployment begins on October 1, 2026 and is permanent, subject to the applicable employment laws.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "3",
+      "parent_id": null,
+      "level": 1,
+      "title": "3. Working Hours",
+      "text": "3. Working Hours\nThe Employee will work 40 hours per week, Monday to Friday, from 9:00 AM to 5:00 PM, with a one-hour lunch break.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "4",
+      "parent_id": null,
+      "level": 1,
+      "title": "4. Salary",
+      "text": "4. Salary\nThe Employee will receive a gross salary of 2,200 TND per month, paid by bank transfer at the end of each month.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "5",
+      "parent_id": null,
+      "level": 1,
+      "title": "5. Leave and Benefits",
+      "text": "5. Leave and Benefits\nThe Employee will receive annual leave, public holidays, social security coverage, and other statutory benefits in accordance with applicable Tunisian law and company policy.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "6",
+      "parent_id": null,
+      "level": 1,
+      "title": "6. Confidentiality",
+      "text": "6. Confidentiality\nThe Employee agrees to keep confidential all non-public information relating to the Employer, its clients, software, finances, and business operations.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "7",
+      "parent_id": null,
+      "level": 1,
+      "title": "7. Termination",
+      "text": "7. Termination\nEither party may terminate this contract in accordance with applicable Tunisian employment laws and required notice periods.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "8",
+      "parent_id": null,
+      "level": 1,
+      "title": "8. Governing Law",
+      "text": "8. Governing Law\nThis contract shall be governed by the laws of Tunisia.\nBy signing below, both parties confirm that they have read, understood, and agreed to the terms of this contract.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "id": "heading_10",
+      "parent_id": null,
+      "level": 1,
+      "title": "EMPLOYER EMPLOYEE",
+      "text": "EMPLOYER EMPLOYEE",
+      "page_start": 1,
+      "page_end": 1
+    }
+  ],
+  "clauses": [
+    {
+      "clause_id": "1",
+      "section_id": "1",
+      "section_title": "Position",
+      "number": "1",
+      "text": "The Employee is hired as a Junior Software Developer. The Employee will develop and maintain software applications, assist with technical tasks, and perform other reasonable duties related to the position.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "clause_id": "2",
+      "section_id": "2",
+      "section_title": "Start Date and Duration",
+      "number": "2",
+      "text": "Employment begins on October 1, 2026 and is permanent, subject to the applicable employment laws.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "clause_id": "3",
+      "section_id": "3",
+      "section_title": "Working Hours",
+      "number": "3",
+      "text": "The Employee will work 40 hours per week, Monday to Friday, from 9:00 AM to 5:00 PM, with a one-hour lunch break.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "clause_id": "4",
+      "section_id": "4",
+      "section_title": "Salary",
+      "number": "4",
+      "text": "The Employee will receive a gross salary of 2,200 TND per month, paid by bank transfer at the end of each month.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "clause_id": "5",
+      "section_id": "5",
+      "section_title": "Leave and Benefits",
+      "number": "5",
+      "text": "The Employee will receive annual leave, public holidays, social security coverage, and other statutory benefits in accordance with applicable Tunisian law and company policy.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "clause_id": "6",
+      "section_id": "6",
+      "section_title": "Confidentiality",
+      "number": "6",
+      "text": "The Employee agrees to keep confidential all non-public information relating to the Employer, its clients, software, finances, and business operations.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "clause_id": "7",
+      "section_id": "7",
+      "section_title": "Termination",
+      "number": "7",
+      "text": "Either party may terminate this contract in accordance with applicable Tunisian employment laws and required notice periods.",
+      "page_start": 1,
+      "page_end": 1
+    },
+    {
+      "clause_id": "8",
+      "section_id": "8",
+      "section_title": "Governing Law",
+      "number": "8",
+      "text": "This contract shall be governed by the laws of Tunisia.\nBy signing below, both parties confirm that they have read, understood, and agreed to the terms of this contract.",
+      "page_start": 1,
+      "page_end": 1
+    }
+  ]
+}

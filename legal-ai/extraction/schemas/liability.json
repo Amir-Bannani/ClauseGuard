@@ -1,0 +1,10 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LiabilityClauseSchema",
+  "type": "object",
+  "properties": {
+    "liability_cap": { "type": "string" },
+    "consequential_damages_excluded": { "type": "boolean" },
+    "indemnification_required": { "type": "boolean" }
+  }
+}
