@@ -226,7 +226,7 @@ Run the existing Python test suite with:
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Concern-detection details are documented in [docs/concern-detection.md](docs/concern-detection.md). The inference service, FastAPI backend, persistence schema, and Next.js frontend remain planned work.
+Concern-detection tests and the synthetic evaluation command are documented in [docs/concern-detection.md](docs/concern-detection.md). The inference service, FastAPI backend, persistence schema, and Next.js frontend remain planned work.
 
 The full upload-to-dashboard application, representative policy validation, and production review criteria remain future work. See [docs/roadmap.md](docs/roadmap.md).
 

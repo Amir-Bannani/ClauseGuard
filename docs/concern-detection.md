@@ -47,7 +47,13 @@ Run the focused tests with:
 .\.venv\Scripts\python.exe -m pytest tests/test_concern_rules.py tests/test_rule_retrieval.py tests/test_concern_detection.py tests/test_concern_evaluation.py -q
 ```
 
-`legal-ai/evaluation/retrieval.py` provides `recall_at_k` over labeled retrieval cases and `binary_rule_metrics` (TP, FP, TN, FN, accuracy) over known extracted facts. These are separate on purpose: rule metrics assume extracted facts are correct and do not measure extraction quality. The included test data is synthetic/demo-only; no representative contract evaluation or real policy quality result is claimed.
+Run the labeled synthetic evaluation with:
+
+```powershell
+.\.venv\Scripts\python.exe legal-ai\evaluation\run_concern_demo.py
+```
+
+`legal-ai/evaluation/retrieval.py` provides `recall_at_k` over labeled retrieval cases and `binary_rule_metrics` (TP, FP, TN, FN, accuracy) over known extracted facts. The demo currently reports Recall@1 1.0 and rule counts TP=3, FP=0, TN=3, FN=0 across six supplied-fact examples. These are mechanics checks on hand-written synthetic cases only. Rule metrics assume extracted facts are correct and do not measure extraction quality. No representative contract evaluation or real policy quality result is claimed.
 
 ## Limitations
 
