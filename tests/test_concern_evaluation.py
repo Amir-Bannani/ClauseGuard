@@ -34,3 +34,10 @@ def test_binary_rule_metrics_counts_confusion_matrix():
 def test_binary_rule_metrics_rejects_unaligned_inputs():
     with pytest.raises(ValueError):
         retrieval_eval.binary_rule_metrics([True], [])
+
+
+def test_runnable_demo_evaluation_reports_fixture_metrics():
+    demo = import_module("legal-ai.evaluation.run_concern_demo").run_demo()
+    assert demo["recall_at_1"] == 1.0
+    assert demo["rule_metrics"] == {"tp": 3, "fp": 0, "tn": 3, "fn": 0, "accuracy": 1.0}
+    assert demo["dataset"].startswith("synthetic")
