@@ -1,0 +1,41 @@
+[
+  {
+    "rule_id": "demo.non_compete.duration_over_12_months",
+    "clause_type": "non_compete",
+    "field": "duration",
+    "operator": "greater_than",
+    "value": 12,
+    "unit": "month",
+    "finding_type": "duration_review",
+    "severity": "high",
+    "description": "Demonstration criterion: review non-compete durations above the configured 12-month example threshold.",
+    "source": "demo_configuration",
+    "exception_field": "exceptions"
+  },
+  {
+    "rule_id": "demo.termination_notice.shorter_than_30_days",
+    "clause_type": "termination_notice",
+    "field": "notice_period",
+    "operator": "less_than",
+    "value": 30,
+    "unit": "day",
+    "finding_type": "notice_period_review",
+    "severity": "medium",
+    "description": "Demonstration criterion: review termination notice periods below the configured 30-day example threshold.",
+    "source": "demo_configuration",
+    "exception_field": null
+  },
+  {
+    "rule_id": "demo.confidentiality.duration_over_60_months",
+    "clause_type": "confidentiality",
+    "field": "duration",
+    "operator": "greater_than",
+    "value": 60,
+    "unit": "month",
+    "finding_type": "duration_review",
+    "severity": "medium",
+    "description": "Demonstration criterion: review confidentiality durations above the configured 60-month example threshold.",
+    "source": "demo_configuration",
+    "exception_field": "exceptions"
+  }
+]
