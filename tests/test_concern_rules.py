@@ -47,6 +47,14 @@ def test_normalized_extractor_duration_is_supported():
     assert rule_matches(rule, facts)
 
 
+def test_raw_duration_corrects_ambiguous_digit_in_number_word():
+    rule = make_rule(field="notice_period", unit="day", value=30, operator="less_than")
+    # The current extractor normalizer can read the "9" inside "ninety";
+    # the raw extraction is retained, so rule comparison reparses that source.
+    facts = {"notice_period": {"raw": "ninety days", "normalized": {"value": 9, "unit": "day"}}}
+    assert not rule_matches(rule, facts)
+
+
 def test_comparison_and_equality_operators():
     assert rule_matches(make_rule(operator="equals", value="worldwide", unit=None),
                         {"duration": "worldwide"})
