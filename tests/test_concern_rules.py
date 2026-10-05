@@ -6,6 +6,7 @@ import pytest
 
 ConcernRule = import_module("legal-ai.rules.engine").ConcernRule
 rule_matches = import_module("legal-ai.rules.engine").rule_matches
+evaluate_rules = import_module("legal-ai.rules.engine").evaluate_rules
 
 
 def make_rule(**overrides):
@@ -72,3 +73,26 @@ def test_missing_null_and_malformed_values_do_not_match():
     assert not rule_matches(rule, {"duration": None})
     assert not rule_matches(rule, {"duration": "an extended period"})
 
+
+def test_evaluator_emits_structured_finding():
+    rule = make_rule()
+    findings = evaluate_rules("non_compete", {"duration": "five (5) years"}, [rule])
+    assert len(findings) == 1
+    result = findings[0].to_dict()
+    assert result["rule_id"] == rule.rule_id
+    assert result["extracted_value"] == "five (5) years"
+    assert result["rule_condition"] == "duration > 12 months"
+    assert result["evidence"] == "five (5) years"
+    assert "potential concern" in result["explanation"]
+
+
+def test_evaluator_suppresses_populated_exception_and_wrong_category():
+    rule = make_rule()
+    assert evaluate_rules("non_compete", {"duration": "five years", "exceptions": ["written consent"]}, [rule]) == []
+    assert evaluate_rules("confidentiality", {"duration": "five years"}, [rule]) == []
+
+
+def test_evaluator_keeps_empty_exceptions_and_supplies_source_evidence():
+    rule = make_rule()
+    findings = evaluate_rules("non_compete", {"duration": "five years", "exceptions": []}, [rule], evidence={"duration": "five (5) years following termination"})
+    assert findings[0].evidence == "five (5) years following termination"
