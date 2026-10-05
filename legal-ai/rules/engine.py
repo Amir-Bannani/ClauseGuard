@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 
 SUPPORTED_OPERATORS = {
@@ -103,3 +103,54 @@ def rule_matches(rule: ConcernRule, facts: Mapping[str, Any]) -> bool:
     except (TypeError, ValueError, KeyError):
         return False
     return False
+
+
+@dataclass(frozen=True)
+class ConcernFinding:
+    rule_id: str
+    clause_type: str
+    finding_type: str
+    severity: str
+    field: str
+    extracted_value: Any
+    rule_condition: str
+    explanation: str
+    evidence: Any
+    source: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
+def evaluate_rules(
+    clause_type: str,
+    facts: Mapping[str, Any],
+    rules: Sequence[ConcernRule],
+    *,
+    evidence: Mapping[str, Any] | None = None,
+) -> list[ConcernFinding]:
+    """Evaluate matching criteria and suppress a match when its exception field is populated."""
+    findings = []
+    for rule in rules:
+        if rule.clause_type != clause_type or not rule_matches(rule, facts):
+            continue
+        if rule.exception_field:
+            exceptions = facts.get(rule.exception_field)
+            if exceptions:
+                continue
+        raw = facts[rule.field]
+        extracted = raw.get("raw", raw) if isinstance(raw, Mapping) else raw
+        findings.append(ConcernFinding(
+            rule_id=rule.rule_id,
+            clause_type=clause_type,
+            finding_type=rule.finding_type,
+            severity=rule.severity,
+            field=rule.field,
+            extracted_value=extracted,
+            rule_condition=rule.rule_condition,
+            explanation=(f"The extracted value for {rule.field} matches a configured review criterion. "
+                         "This is a potential concern according to the configured review policy."),
+            evidence=(evidence or {}).get(rule.field, extracted),
+            source=rule.source,
+        ))
+    return findings
