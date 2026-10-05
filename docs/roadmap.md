@@ -89,12 +89,13 @@ Planned milestones for ClauseGuard. All milestones are forward-looking; nothing 
 
 **Goal:** Implement the rule-based clause evaluation layer.
 
-- [ ] Define and document the initial checklist of clause checks
-- [ ] For each check: specify the clause type, the feature extracted, the threshold, and the rationale
-- [ ] Implement the rule-based evaluation layer against classified clauses
-- [ ] Produce structured findings with clear "flagged for review" language
+- [X] Define and document demonstration review criteria, with explicit non-legal configuration status
+- [X] For each demo check: specify clause type, extracted feature, threshold, and rationale
+- [X] Implement deterministic rule evaluation against extracted facts
+- [X] Produce structured potential-concern findings with evidence
 - [ ] Test with representative contracts
-- [ ] Document the explicit boundary between what the model does (classification) and what the checklist does (evaluation)
+- [X] Document the boundary between classification, extraction, retrieval, and evaluation
+- [X] Add local retrieval of matching rule context and separate Recall@k / rule-confusion metric helpers
 
 **Deliverable:** A documented, testable, rule-based evaluation layer producing structured, explainable findings.
 
@@ -107,6 +108,7 @@ Planned milestones for ClauseGuard. All milestones are forward-looking; nothing 
 - [ ] Train a second ML model for concern/checklist classification (only with a defensible labeling methodology)
 - [ ] Evidence / clause highlighting (possibly CUAD-informed)
 - [ ] Optional: LLM-powered natural-language explanations of structured findings
+- [X] Local metadata-filtered retrieval of configured review criteria (no vector database)
 - [ ] Optional: semantic search / RAG over extracted clauses ("Find every clause related to termination")
 - [ ] Additional document formats and extraction pipelines if needed
 

@@ -73,6 +73,10 @@ It does **not** own users, authentication, application history, document storage
 
 The service wraps a model exported as `model.onnx` and exposes a minimal prediction interface (an internal HTTP endpoint; exact contract TBD).
 
+### Concern Detection and Review-Criteria Retrieval
+
+The repository includes a local concern-detection foundation that consumes the existing category-specific extractor output. The extractor's JSON string is adapted and its duration fields are normalized without changing the extractor. Review rules are retrieved by clause type and metadata, then evaluated deterministically into structured findings. The small lexical retriever is replaceable; it is not a vector store or legal corpus search system. See [concern-detection.md](concern-detection.md) for interfaces, configuration, tests, and limitations.
+
 ### PostgreSQL
 
 PostgreSQL stores application state and analysis history:
@@ -146,7 +150,7 @@ These are deliberately excluded from V1. Each may be added later only if a concr
 - Kubernetes
 - Kafka / event streaming
 - gRPC
-- Vector database / RAG
+- External vector database / hosted embeddings (the current local criteria retriever does not require these)
 - Redis (unless asynchronous processing actually requires it)
 - Complex multi-agent systems
 - LLM-based contract analysis as the core ML system
@@ -155,4 +159,4 @@ This is a deliberate choice to avoid architecture theater: components that solve
 
 ## Status
 
-Components, responsibilities, and boundaries above are design decisions for the implementation phase. Implementation order is tracked in [roadmap.md](roadmap.md).
+The backend, PostgreSQL schema, inference service, and frontend remain planned. Clause classification/extraction modules and the local concern-detection foundation exist in the repository. Implementation order is tracked in [roadmap.md](roadmap.md).

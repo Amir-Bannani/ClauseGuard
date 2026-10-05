@@ -16,8 +16,9 @@ A user uploads a PDF or DOCX contract. ClauseGuard:
 1. extracts the text,
 2. segments it into clauses/sections,
 3. classifies each clause with a supervised NLP model,
-4. evaluates each clause against a documented checklist,
-5. presents the results as structured findings in a dashboard.
+4. extracts structured fields from supported clause categories,
+5. retrieves applicable configured review criteria and evaluates them deterministically,
+6. presents the results as structured findings in a dashboard.
 
 Classification alone does not say whether a contract is "good" or "bad." ClauseGuard separates the *what* (a non-compete clause, confidence 0.94) from the *so what* (duration of five years exceeds the configured checklist threshold of one year → **flagged for review**). Findings are always reported as checklist-based potential concerns, never as legal conclusions.
 
@@ -38,9 +39,11 @@ flowchart LR
     A[PDF / DOCX] --> B[Text extraction]
     B --> C[Clause / section segmentation]
     C --> D[Clause classification\n supervised NLP]
-    D --> E[Checklist evaluation\n rule-based, V1]
-    E --> F[Structured findings]
-    F --> G[Analysis dashboard]
+    D --> E[Structured extraction]
+    E --> F[Review criteria retrieval]
+    F --> G[Deterministic rule evaluation]
+    G --> H[Structured findings]
+    H --> I[Analysis dashboard]
 ```
 
 ### Running example
@@ -70,7 +73,7 @@ ClauseGuard explains that this is a **potential concern according to a configure
 
 ## Machine Learning
 
-The project deliberately follows an ML progression from baseline to production artifact rather than jumping straight to a transformer.
+The project includes a TF-IDF baseline and legal-domain classification/extraction modules; training and serving status is documented in the corresponding ML reports and source. The concern-detection foundation is a separate, deterministic configured-policy layer.
 
 | Phase | Approach | Purpose |
 | --- | --- | --- |
@@ -84,7 +87,7 @@ We will not claim ahead of time which model wins; the comparison is the experime
 
 **Evaluation integrity:** clauses originating from the same contract must not leak across train/test splits in a way that makes evaluation artificially optimistic. Document-level splitting is treated as a first-class requirement. Trustworthy evaluation matters more than an impressive-looking number.
 
-> **Status:** No models have been trained yet. All experimental results are placeholder / TBD and will be filled in after experiments run.
+> **Status:** The TF-IDF baseline experiment is complete. See [docs/ml-pipeline.md](docs/ml-pipeline.md) for the measured result and evaluation limitations.
 
 See [docs/ml-pipeline.md](docs/ml-pipeline.md) and [docs/dataset.md](docs/dataset.md).
 
@@ -130,6 +133,8 @@ The first dataset is **LEDGAR**, accessed through the **LexGLUE** benchmark.
 
 For the experiment design, dataset structure, and verified statistics, see [docs/dataset.md](docs/dataset.md).
 
+The concern-detection foundation consumes the existing category-specific extractor output. It uses explicitly labeled demonstration criteria and local metadata-filtered lexical retrieval; the deterministic rule evaluator, rather than retrieval or an LLM, determines whether a finding is emitted. See [docs/concern-detection.md](docs/concern-detection.md).
+
 ## Tech Stack
 
 Planned (V1):
@@ -141,7 +146,7 @@ Planned (V1):
 - **Document processing:** PyMuPDF (PDF), python-docx (DOCX)
 - **Serving:** Docker images; the trained model is exported as `model.onnx` in the inference-service image
 
-Intentionally **not** in V1: Kubernetes, Kafka, gRPC, vector databases, RAG, Redis, multi-agent systems, and LLM-based contract analysis as the core ML system. These will be added only if a concrete requirement justifies them.
+Intentionally **not** in V1: Kubernetes, Kafka, gRPC, external vector databases, Redis, multi-agent systems, and LLM-based contract analysis as the core ML system. Local retrieval of configured review criteria is implemented without a vector store or paid embedding service.
 
 ## Roadmap
 
@@ -167,7 +172,8 @@ The project deliberately avoids claiming that it "detects illegal clauses," "det
 
 - **LLM-powered explanations** of structured findings in natural language
 - **Question answering** over extracted contract information
-- **Semantic search / RAG**: "Find every clause related to termination," "Show me the clauses concerning liability"
+- **Embedding-based semantic retrieval** if the configured-criteria corpus grows enough to justify it
+- **Semantic search over contract clauses**: "Find every clause related to termination," "Show me the clauses concerning liability"
 - A second ML model for concern/checklist classification (only with a defensible labeling methodology)
 
 The system must remain fully useful without an LLM; these are additive features, not the core.
@@ -184,7 +190,7 @@ ClauseGuard/
 │   └── roadmap.md
 ```
 
-This repository currently contains documentation only. Application code (training scripts, services, frontend) will be added as the project progresses. The structure above will grow to reflect that code.
+The repository contains ML scripts, document parsing, classification and extraction modules, and the concern-detection foundation. The full backend, persistence layer, and frontend remain planned work.
 
 ## CI / CD (GitHub Actions)
 
@@ -214,14 +220,15 @@ Design rules:
 
 ## Development
 
-There is no application code yet, so there are no setup or run commands to document. As the codebase is built, this section will gain installation and usage instructions for:
+Run the existing Python test suite with:
 
-- the ML training environment (Python; baseline + transformer experiments),
-- the inference service (Docker image containing `model.onnx`),
-- the FastAPI backend and Postgres schema,
-- the Next.js frontend.
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
 
-The immediate next engineering step is to **load and inspect the LEDGAR dataset before writing any classifier** — see [docs/dataset.md](docs/dataset.md) and Milestone 1 in [docs/roadmap.md](docs/roadmap.md).
+Concern-detection details are documented in [docs/concern-detection.md](docs/concern-detection.md). The inference service, FastAPI backend, persistence schema, and Next.js frontend remain planned work.
+
+The full upload-to-dashboard application, representative policy validation, and production review criteria remain future work. See [docs/roadmap.md](docs/roadmap.md).
 
 ---
 
