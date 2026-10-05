@@ -32,11 +32,11 @@
     "clause_type": "confidentiality",
     "field": "duration",
     "operator": "greater_than",
-    "value": 60,
+    "value": 61,
     "unit": "month",
     "finding_type": "duration_review",
     "severity": "medium",
-    "description": "Demonstration criterion: review confidentiality durations above the configured 60-month example threshold.",
+    "description": "Demonstration criterion: review confidentiality durations above the configured 61-month example threshold.",
     "rationale": "This sample entry demonstrates how a team could request manual review for a duration chosen in its own policy configuration.",
     "source": "demo_configuration",
     "exception_field": "exceptions"
