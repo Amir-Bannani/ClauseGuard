@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -57,26 +58,40 @@ class ConcernRule:
 
 def _duration_value(value: Any, target_unit: str | None) -> float:
     """Convert extractor Normalizer output or raw duration text to target units."""
-    from importlib import import_module
-    Normalizer = import_module("legal-ai.extraction.normalizer").Normalizer
-
-    parsed = value
+    raw = value.get("raw") if isinstance(value, Mapping) else value
+    parsed = _parse_duration(raw) if isinstance(raw, str) else None
     if isinstance(value, Mapping):
-        parsed = value.get("normalized", value)
-        if isinstance(parsed, Mapping):
-            unit = parsed.get("unit")
-            amount = parsed.get("value")
-        else:
-            unit = amount = None
+        if parsed is None:
+            parsed = value.get("normalized", value)
+    if isinstance(parsed, Mapping):
+        unit = parsed.get("unit")
+        amount = parsed.get("value")
     else:
-        parsed = Normalizer.parse_duration(value)
-        unit = parsed.get("unit") if parsed else None
-        amount = parsed.get("value") if parsed else None
+        unit = amount = None
     if amount is None or unit is None:
         raise ValueError("malformed duration")
     factors = {"day": 1.0, "month": 30.0, "year": 365.0}
     target = target_unit or unit
     return float(amount) * factors[unit] / factors[target]
+
+
+def _parse_duration(raw: str) -> dict[str, Any] | None:
+    """Parse known duration words before digits (e.g. 'ninety' before its '9')."""
+    text = raw.casefold().strip()
+    if text == "immediately":
+        return {"value": 0, "unit": "day"}
+    unit = next((name for name in ("year", "month", "day") if name in text), None)
+    if unit is None:
+        return None
+    words = {"twenty-four": 24, "eighteen": 18, "twelve": 12, "ninety": 90,
+             "sixty": 60, "thirty": 30, "ten": 10, "nine": 9,
+             "eight": 8, "seven": 7, "six": 6, "five": 5,
+             "four": 4, "three": 3, "two": 2, "one": 1}
+    for word, number in words.items():
+        if re.search(rf"\b{re.escape(word)}\b", text):
+            return {"value": number, "unit": unit}
+    match = re.search(r"\b(\d+)\b", text)
+    return {"value": int(match.group(1)), "unit": unit} if match else None
 
 
 def rule_matches(rule: ConcernRule, facts: Mapping[str, Any]) -> bool:
