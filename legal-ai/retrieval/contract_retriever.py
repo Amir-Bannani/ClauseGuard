@@ -105,3 +105,8 @@ class InMemoryRuleRetriever:
                 value = value.get("raw", value.get("normalized", value))
             parts.append(f"{field} {value}")
         return self.retrieve(" ".join(parts), clause_type=clause_type, top_k=top_k)
+
+    def get_rules_for_clause_type(self, clause_type: str) -> list[ConcernRule]:
+        """Return all configured rules applicable to a clause type without lexical ranking."""
+        return [doc.rule for doc in self.documents if doc.rule.clause_type == clause_type]
+

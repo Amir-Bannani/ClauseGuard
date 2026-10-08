@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from pathlib import Path
+from typing import Any, Mapping, Protocol, Sequence
 
 
 SUPPORTED_OPERATORS = {
@@ -169,3 +171,28 @@ def evaluate_rules(
             source=rule.source,
         ))
     return findings
+
+
+class RuleStore(Protocol):
+    """Protocol for rule-store implementations providing rules by clause type."""
+
+    def get_rules_for_clause_type(self, clause_type: str) -> Sequence[ConcernRule]: ...
+
+
+def load_rules(path: str | Path | None = None) -> list[ConcernRule]:
+    """Load configured review rules from JSON fixture."""
+    fixture = Path(path) if path else Path(__file__).parent / "review_rules.json"
+    records = json.loads(fixture.read_text(encoding="utf-8"))
+    return [ConcernRule(**{k: v for k, v in record.items() if k != "rationale"}) for record in records]
+
+
+class InMemoryRuleStore:
+    """Store for configured review rules partitioned by clause type."""
+
+    def __init__(self, rules: Sequence[ConcernRule] | None = None):
+        self.rules = list(rules if rules is not None else load_rules())
+
+    def get_rules_for_clause_type(self, clause_type: str) -> list[ConcernRule]:
+        """Return all configured rules applicable to a clause type."""
+        return [rule for rule in self.rules if rule.clause_type == clause_type]
+

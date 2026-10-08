@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from importlib import import_module
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 retrieval_module = import_module("legal-ai.retrieval.contract_retriever")
 engine_module = import_module("legal-ai.rules.engine")
@@ -37,10 +37,30 @@ def adapt_extraction_output(output: str | Mapping[str, Any]) -> dict[str, Any]:
 
 
 class ConcernDetector:
-    """Retrieve criteria by clause metadata, then evaluate them deterministically."""
+    """Evaluate all applicable criteria deterministically, with optional supplementary retrieval.
 
-    def __init__(self, retriever: Any | None = None):
-        self.retriever = retriever or retrieval_module.InMemoryRuleRetriever()
+    Rule selection identifies all rules applicable to the given clause type from the
+    rule store, ensuring retrieval ranking or top_k filtering cannot cause an
+    applicable rule to be skipped. Supplementary retrieval is retained to provide
+    supporting context and rationale.
+    """
+
+    def __init__(
+        self,
+        retriever: Any | None = None,
+        rule_store: Any | None = None,
+        *,
+        rules: Sequence[Any] | None = None,
+    ):
+        if rule_store is not None:
+            self.rule_store = rule_store
+        elif rules is not None:
+            self.rule_store = engine_module.InMemoryRuleStore(rules)
+        elif retriever is not None and hasattr(retriever, "get_rules_for_clause_type"):
+            self.rule_store = retriever
+        else:
+            self.rule_store = engine_module.InMemoryRuleStore()
+        self.retriever = retriever if retriever is not None else retrieval_module.InMemoryRuleRetriever()
 
     def detect(
         self,
@@ -50,12 +70,24 @@ class ConcernDetector:
         clause_text: str | None = None,
         top_k: int = 5,
     ) -> DetectionResult:
+        """Evaluate all applicable rules for clause_type, plus optional supplementary retrieval.
+
+        Parameters:
+            clause_type: The categorized type of the clause (e.g. 'non_compete').
+            extraction_output: Raw JSON string or dictionary of extracted facts.
+            clause_text: Optional full clause string used for extracting substring evidence.
+            top_k: Maximum number of supplementary rule documents to retrieve for
+                   supporting context and rationale. Does NOT limit rule evaluation.
+        """
         facts = adapt_extraction_output(extraction_output)
-        documents = self.retriever.retrieve_for_facts(clause_type, facts, top_k=top_k)
+        applicable_rules = self.rule_store.get_rules_for_clause_type(clause_type)
         evidence = _evidence_by_field(facts, clause_text)
         findings = engine_module.evaluate_rules(
-            clause_type, facts, [document.rule for document in documents], evidence=evidence
+            clause_type, facts, applicable_rules, evidence=evidence
         )
+        documents = []
+        if self.retriever is not None and hasattr(self.retriever, "retrieve_for_facts"):
+            documents = self.retriever.retrieve_for_facts(clause_type, facts, top_k=top_k)
         return DetectionResult(findings, [document.rule_id for document in documents])
 
 
