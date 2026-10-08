@@ -7,6 +7,8 @@ import pytest
 ConcernRule = import_module("legal-ai.rules.engine").ConcernRule
 rule_matches = import_module("legal-ai.rules.engine").rule_matches
 evaluate_rules = import_module("legal-ai.rules.engine").evaluate_rules
+load_rules = import_module("legal-ai.rules.engine").load_rules
+InMemoryRuleStore = import_module("legal-ai.rules.engine").InMemoryRuleStore
 
 
 def make_rule(**overrides):
@@ -104,3 +106,34 @@ def test_evaluator_keeps_empty_exceptions_and_supplies_source_evidence():
     rule = make_rule()
     findings = evaluate_rules("non_compete", {"duration": "five years", "exceptions": []}, [rule], evidence={"duration": "five (5) years following termination"})
     assert findings[0].evidence == "five (5) years following termination"
+
+
+def test_load_rules_returns_configured_criteria():
+    rules = load_rules()
+    assert len(rules) == 3
+    assert all(isinstance(rule, ConcernRule) for rule in rules)
+    clause_types = {rule.clause_type for rule in rules}
+    assert clause_types == {"non_compete", "termination_notice", "confidentiality"}
+
+
+def test_in_memory_rule_store_filters_by_clause_type():
+    rule_nc1 = make_rule(rule_id="nc.1", clause_type="non_compete")
+    rule_nc2 = make_rule(rule_id="nc.2", clause_type="non_compete")
+    rule_term = make_rule(rule_id="term.1", clause_type="termination_notice")
+    store = InMemoryRuleStore([rule_nc1, rule_nc2, rule_term])
+
+    nc_rules = store.get_rules_for_clause_type("non_compete")
+    assert [r.rule_id for r in nc_rules] == ["nc.1", "nc.2"]
+
+    term_rules = store.get_rules_for_clause_type("termination_notice")
+    assert [r.rule_id for r in term_rules] == ["term.1"]
+
+    assert store.get_rules_for_clause_type("confidentiality") == []
+
+
+def test_in_memory_rule_store_defaults_to_all_fixture_rules():
+    store = InMemoryRuleStore()
+    nc_rules = store.get_rules_for_clause_type("non_compete")
+    assert len(nc_rules) == 1
+    assert nc_rules[0].rule_id == "demo.non_compete.duration_over_12_months"
+
