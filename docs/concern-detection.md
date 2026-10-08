@@ -6,22 +6,31 @@ ClauseGuard separates extraction from policy evaluation:
 classified clause
 → existing category-specific extractor
 → normalized extracted facts
-→ retrieve applicable configured review criteria
+→ all applicable configured review criteria for clause type
 → deterministic rule evaluation
 → structured findings
+(optional supplementary criteria retrieval for supporting context)
 ```
 
 The classifier currently returns a mapping with `category`, `label_id`, `confidence`, and `probabilities`. `NuExtractExtractor.extract(text, category)` returns a JSON string matching the category schema in `legal-ai/extraction/llm_extractor.py`. The detector accepts that existing string or a parsed mapping and uses the existing duration normalizer. The classifier and extractor remain unchanged.
 
 ## Responsibilities and limits
 
-Extraction answers **what the clause says**. Concern detection answers **whether extracted facts match a configured review criterion**. The rule evaluator makes the final decision deterministically from the extracted value and condition. Retrieval supplies relevant rule context and explanations; it does not make the concern decision. There is no LLM judge, opaque risk score, external API, or vector database in this foundation.
+Extraction answers **what the clause says**. Concern detection answers **whether extracted facts match a configured review criterion**.
+
+To prevent silent false negatives, rule selection is separated from retrieval:
+1. **Rule selection**: Resolves **all** configured review rules applicable to the extracted `clause_type` from the rule store (`InMemoryRuleStore`). An applicable rule is never skipped due to lexical ranking, query mismatches, or top-k truncation.
+2. **Deterministic evaluation**: Evaluates each applicable rule deterministically against the extracted facts. The rule evaluator makes the final decision from the extracted value and condition. There is no LLM judge, opaque risk score, external API, or vector database in this foundation.
+3. **Supplementary retrieval**: Optional criteria retrieval provides supporting rule context, rationale, and source metadata. The `top_k` parameter controls the number of supplementary retrieved documents returned in `DetectionResult.retrieved_rule_ids` and does not limit the rules evaluated.
 
 The initial retrieval implementation is local and replaceable through the `RuleRetriever` protocol. It filters by clause type and optional metadata, then orders applicable documents by simple token overlap. `retrieve_for_facts` builds its query only from the clause category and extracted fields; it does not send an entire contract to retrieval. This is a transparent local retrieval baseline, not an embedding-based semantic search system.
+
 
 ## Rules and configuration
 
 `legal-ai/rules/engine.py` defines `ConcernRule`. A rule includes a stable ID, clause type, field, operator, expected value, optional duration unit, finding type, severity, description, source, and optional exception field. Supported operations are equality/inequality, numeric comparisons, membership/containment, boolean checks, and non-empty checks. Rules are typed Python data; arbitrary expressions are never evaluated.
+
+Rule selection is provided by `RuleStore` and implemented by `InMemoryRuleStore`, which loads rules via `load_rules()` from `review_rules.json` and partitions/filters them by `clause_type`. `InMemoryRuleRetriever` also implements `get_rules_for_clause_type()` directly from indexed documents.
 
 The checked-in `legal-ai/rules/review_rules.json` entries are **demonstration configuration**, not legal thresholds or statements of law. Their IDs begin with `demo.` and their source is `demo_configuration`. Replace or supplement them with a team's documented review policy before relying on the results. Duration comparisons normalize to days using 30 days per month and 365 days per year; these are arithmetic comparison conventions, not legal definitions.
 
