@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from collections.abc import Mapping as ABCMapping, Sequence as ABCSequence, Set as ABCSet
+from dataclasses import dataclass, replace
+from numbers import Real
 from pathlib import Path
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Literal, Mapping, Protocol, Sequence
 
 
 SUPPORTED_OPERATORS = {
@@ -15,6 +17,42 @@ SUPPORTED_OPERATORS = {
     "is_true", "is_false", "is_not_empty",
 }
 SEVERITIES = {"info", "low", "medium", "high"}
+RuleOutcome = Literal["matched", "not_matched", "could_not_evaluate"]
+MATCHED: RuleOutcome = "matched"
+NOT_MATCHED: RuleOutcome = "not_matched"
+COULD_NOT_EVALUATE: RuleOutcome = "could_not_evaluate"
+EXCEPTION_NOT_CONFIGURED = "not_configured"
+EXCEPTION_NOT_EXTRACTED = "not_extracted"
+EXCEPTION_EMPTY = "empty"
+EXCEPTION_COULD_NOT_EVALUATE = "could_not_evaluate"
+EXCEPTION_EXTRACTED_UNVERIFIED = "extracted_unverified"
+
+
+def _is_number(value: Any) -> bool:
+    return isinstance(value, Real) and not isinstance(value, bool)
+
+
+def _validate_rule_operand(operator: str, value: Any, unit: str | None) -> None:
+    if operator in {"is_true", "is_false", "is_not_empty"}:
+        if value is not None:
+            raise ValueError(f"value must be omitted for {operator}")
+        if unit is not None:
+            raise ValueError(f"unit is not supported for {operator}")
+        return
+    if value is None:
+        raise ValueError(f"value is required for {operator}")
+    if isinstance(value, ABCMapping):
+        raise ValueError(f"value must not be a mapping for {operator}")
+    if unit is not None or operator in {
+        "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal"
+    }:
+        if not _is_number(value):
+            raise ValueError(f"value must be numeric for {operator}")
+    elif operator == "contains" and isinstance(value, (str, bytes)):
+        pass
+    elif operator == "in":
+        if not isinstance(value, (ABCSequence, ABCSet)) or isinstance(value, (str, bytes)):
+            raise ValueError("value must be a collection for in")
 
 
 @dataclass(frozen=True)
@@ -41,10 +79,9 @@ class ConcernRule:
             raise ValueError(f"unsupported operator: {self.operator}")
         if self.severity not in SEVERITIES:
             raise ValueError(f"unsupported severity: {self.severity}")
-        if self.operator not in {"is_true", "is_false", "is_not_empty"} and self.value is None:
-            raise ValueError(f"value is required for {self.operator}")
         if self.unit is not None and self.unit not in {"day", "month", "year"}:
             raise ValueError("unit must be day, month, or year")
+        _validate_rule_operand(self.operator, self.value, self.unit)
 
     @property
     def rule_condition(self) -> str:
@@ -96,30 +133,169 @@ def _parse_duration(raw: str) -> dict[str, Any] | None:
     return {"value": int(match.group(1)), "unit": unit} if match else None
 
 
-def rule_matches(rule: ConcernRule, facts: Mapping[str, Any]) -> bool:
-    """Return whether one field satisfies a rule. Missing/malformed data is no match."""
-    if rule.field not in facts or facts[rule.field] is None:
-        return False
+@dataclass(frozen=True)
+class RuleEvaluation:
+    """Outcome of evaluating one configured rule against extracted facts."""
+
+    rule_id: str
+    clause_type: str
+    field: str
+    outcome: RuleOutcome
+    reason: str
+    extracted_value: Any = None
+    exception_status: str = EXCEPTION_NOT_CONFIGURED
+    exception_field: str | None = None
+    exception_value: Any = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
+def exception_state(rule: ConcernRule, facts: Mapping[str, Any]) -> tuple[str, str | None, Any]:
+    """Describe extracted exception text without judging legal applicability."""
+    field_name = rule.exception_field
+    if not field_name:
+        return EXCEPTION_NOT_CONFIGURED, None, None
+    if field_name not in facts:
+        return EXCEPTION_NOT_EXTRACTED, field_name, None
+    value = facts[field_name]
+    if value is None:
+        return EXCEPTION_COULD_NOT_EVALUATE, field_name, None
+    if not value:
+        return EXCEPTION_EMPTY, field_name, value
+    return EXCEPTION_EXTRACTED_UNVERIFIED, field_name, value
+
+
+def evaluate_rule(rule: ConcernRule, facts: Mapping[str, Any]) -> RuleEvaluation:
+    """Evaluate one rule. Missing or malformed facts are could_not_evaluate, not a negative match."""
+    evaluation = _evaluate_condition(rule, facts)
+    status, field_name, value = exception_state(rule, facts)
+    return replace(
+        evaluation,
+        exception_status=status,
+        exception_field=field_name,
+        exception_value=value,
+    )
+
+
+def _evaluate_condition(rule: ConcernRule, facts: Mapping[str, Any]) -> RuleEvaluation:
+    extracted = facts[rule.field] if rule.field in facts else None
+    if rule.field not in facts:
+        return RuleEvaluation(
+            rule_id=rule.rule_id,
+            clause_type=rule.clause_type,
+            field=rule.field,
+            outcome=COULD_NOT_EVALUATE,
+            reason=f"required field '{rule.field}' is missing",
+        )
+    if facts[rule.field] is None:
+        return RuleEvaluation(
+            rule_id=rule.rule_id,
+            clause_type=rule.clause_type,
+            field=rule.field,
+            outcome=COULD_NOT_EVALUATE,
+            reason=f"required field '{rule.field}' is null",
+            extracted_value=None,
+        )
     actual = facts[rule.field]
     expected = rule.value
+    op = rule.operator
     try:
         if rule.unit:
             actual = _duration_value(actual, rule.unit)
-        op = rule.operator
-        if op == "equals": return actual == expected
-        if op == "not_equals": return actual != expected
-        if op == "greater_than": return actual > expected
-        if op == "greater_than_or_equal": return actual >= expected
-        if op == "less_than": return actual < expected
-        if op == "less_than_or_equal": return actual <= expected
-        if op == "contains": return expected in actual
-        if op == "in": return actual in expected
-        if op == "is_true": return actual is True
-        if op == "is_false": return actual is False
-        if op == "is_not_empty": return bool(actual)
-    except (TypeError, ValueError, KeyError):
-        return False
-    return False
+        elif op in {"equals", "not_equals"} and isinstance(actual, ABCMapping):
+            raise TypeError("mapping is not a supported scalar value")
+        elif op in {"is_true", "is_false"} and not isinstance(actual, bool):
+            raise TypeError("boolean value required")
+        elif op in {
+            "greater_than", "greater_than_or_equal", "less_than", "less_than_or_equal"
+        } and not _is_number(actual):
+            raise TypeError("numeric value required")
+        elif op == "contains":
+            if isinstance(actual, ABCMapping) or isinstance(expected, ABCMapping):
+                raise TypeError("mapping is not a supported containment value")
+            if isinstance(actual, (str, bytes)) and not isinstance(expected, type(actual)):
+                raise TypeError("containment value types do not match")
+            if not isinstance(actual, (str, bytes, ABCSequence, ABCSet)):
+                raise TypeError("sequence or string value required")
+        elif op == "in":
+            if isinstance(actual, ABCMapping) or not isinstance(expected, (ABCSequence, ABCSet)):
+                raise TypeError("membership values are malformed")
+        if op == "equals":
+            matched = actual == expected
+        elif op == "not_equals":
+            matched = actual != expected
+        elif op == "greater_than":
+            matched = actual > expected
+        elif op == "greater_than_or_equal":
+            matched = actual >= expected
+        elif op == "less_than":
+            matched = actual < expected
+        elif op == "less_than_or_equal":
+            matched = actual <= expected
+        elif op == "contains":
+            matched = expected in actual
+        elif op == "in":
+            matched = actual in expected
+        elif op == "is_true":
+            matched = actual is True
+        elif op == "is_false":
+            matched = actual is False
+        elif op == "is_not_empty":
+            matched = bool(actual)
+        else:
+            raise ValueError(f"unsupported operator: {op}")
+    except ValueError as exc:
+        if str(exc).startswith("unsupported operator"):
+            raise
+        return RuleEvaluation(
+            rule_id=rule.rule_id,
+            clause_type=rule.clause_type,
+            field=rule.field,
+            outcome=COULD_NOT_EVALUATE,
+            reason=f"extracted value for '{rule.field}' is malformed or unsupported",
+            extracted_value=extracted,
+        )
+    except (TypeError, KeyError):
+        return RuleEvaluation(
+            rule_id=rule.rule_id,
+            clause_type=rule.clause_type,
+            field=rule.field,
+            outcome=COULD_NOT_EVALUATE,
+            reason=f"extracted value for '{rule.field}' is malformed or unsupported",
+            extracted_value=extracted,
+        )
+    if matched:
+        return RuleEvaluation(
+            rule_id=rule.rule_id,
+            clause_type=rule.clause_type,
+            field=rule.field,
+            outcome=MATCHED,
+            reason="condition is satisfied",
+            extracted_value=extracted,
+        )
+    return RuleEvaluation(
+        rule_id=rule.rule_id,
+        clause_type=rule.clause_type,
+        field=rule.field,
+        outcome=NOT_MATCHED,
+        reason="required facts are available and the condition is not satisfied",
+        extracted_value=extracted,
+    )
+
+
+def rule_matches(rule: ConcernRule, facts: Mapping[str, Any]) -> bool:
+    """Return True only when extracted facts are sufficient and satisfy the rule."""
+    return evaluate_rule(rule, facts).outcome == MATCHED
+
+
+def evaluate_all_rules(
+    clause_type: str,
+    facts: Mapping[str, Any],
+    rules: Sequence[ConcernRule],
+) -> list[RuleEvaluation]:
+    """Evaluate every applicable configured rule independently of retrieval ranking."""
+    return [evaluate_rule(rule, facts) for rule in rules if rule.clause_type == clause_type]
 
 
 @dataclass(frozen=True)
@@ -134,6 +310,9 @@ class ConcernFinding:
     explanation: str
     evidence: Any
     source: str
+    exception_status: str = EXCEPTION_NOT_CONFIGURED
+    exception_field: str | None = None
+    exception_value: Any = None
 
     def to_dict(self) -> dict[str, Any]:
         return {name: getattr(self, name) for name in self.__dataclass_fields__}
@@ -146,17 +325,23 @@ def evaluate_rules(
     *,
     evidence: Mapping[str, Any] | None = None,
 ) -> list[ConcernFinding]:
-    """Evaluate matching criteria and suppress a match when its exception field is populated."""
+    """Emit findings for matched rules. Extracted exceptions are recorded, not used to dismiss matches."""
     findings = []
     for rule in rules:
-        if rule.clause_type != clause_type or not rule_matches(rule, facts):
+        evaluation = evaluate_rule(rule, facts)
+        if rule.clause_type != clause_type or evaluation.outcome != MATCHED:
             continue
-        if rule.exception_field:
-            exceptions = facts.get(rule.exception_field)
-            if exceptions:
-                continue
         raw = facts[rule.field]
         extracted = raw.get("raw", raw) if isinstance(raw, Mapping) else raw
+        explanation = (
+            f"The extracted value for {rule.field} matches a configured review criterion. "
+            "This is a potential concern according to the configured review policy."
+        )
+        if evaluation.exception_status == EXCEPTION_EXTRACTED_UNVERIFIED:
+            explanation += (
+                " An extracted exception is present, but its applicability has not been established "
+                "and it does not dismiss this finding."
+            )
         findings.append(ConcernFinding(
             rule_id=rule.rule_id,
             clause_type=clause_type,
@@ -165,10 +350,12 @@ def evaluate_rules(
             field=rule.field,
             extracted_value=extracted,
             rule_condition=rule.rule_condition,
-            explanation=(f"The extracted value for {rule.field} matches a configured review criterion. "
-                         "This is a potential concern according to the configured review policy."),
+            explanation=explanation,
             evidence=(evidence or {}).get(rule.field, extracted),
             source=rule.source,
+            exception_status=evaluation.exception_status,
+            exception_field=evaluation.exception_field,
+            exception_value=evaluation.exception_value,
         ))
     return findings
 
@@ -195,4 +382,3 @@ class InMemoryRuleStore:
     def get_rules_for_clause_type(self, clause_type: str) -> list[ConcernRule]:
         """Return all configured rules applicable to a clause type."""
         return [rule for rule in self.rules if rule.clause_type == clause_type]
-
