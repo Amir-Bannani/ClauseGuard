@@ -308,10 +308,12 @@ def test_evaluator_keeps_empty_exceptions_and_supplies_source_evidence():
 
 def test_load_rules_returns_configured_criteria():
     rules = load_rules()
-    assert len(rules) == 3
+    assert len(rules) == 16
     assert all(isinstance(rule, ConcernRule) for rule in rules)
     clause_types = {rule.clause_type for rule in rules}
-    assert clause_types == {"non_compete", "termination_notice", "confidentiality"}
+    assert clause_types == {"non_compete", "termination_notice", "confidentiality",
+                            "no_solicit_customers", "no_solicit_employees", "exclusivity",
+                            "ip_assignment", "liability_indemnity", "governing_law"}
 
 
 def test_in_memory_rule_store_filters_by_clause_type():

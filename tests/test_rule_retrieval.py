@@ -11,7 +11,7 @@ load_rule_documents = retrieval.load_rule_documents
 
 def test_fixture_documents_include_rule_and_source_metadata():
     docs = load_rule_documents()
-    assert len(docs) == 3
+    assert len(docs) == 16
     assert all(doc.rule_id and doc.source == "demo_configuration" for doc in docs)
     assert all("Review rationale:" in doc.text for doc in docs)
 
@@ -19,7 +19,8 @@ def test_fixture_documents_include_rule_and_source_metadata():
 def test_retrieval_filters_by_clause_type():
     retriever = InMemoryRuleRetriever()
     docs = retriever.retrieve("long duration review", clause_type="non_compete")
-    assert [doc.rule_id for doc in docs] == ["demo.non_compete.duration_over_12_months"]
+    assert len(docs) == 2
+    assert all(doc.rule.clause_type == "non_compete" for doc in docs)
 
 
 def test_retrieval_applies_metadata_filter():

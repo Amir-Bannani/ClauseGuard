@@ -26,7 +26,7 @@ def test_extractor_json_to_retrieved_rule_and_finding():
     result = ConcernDetector().detect(
         "non_compete", '{"duration": "five (5) years", "exceptions": []}', clause_text=clause
     ).to_dict()
-    assert result["retrieved_rule_ids"] == ["demo.non_compete.duration_over_12_months"]
+    assert "demo.non_compete.duration_over_12_months" in result["retrieved_rule_ids"]
     assert len(result["findings"]) == 1
     finding = result["findings"][0]
     assert finding["extracted_value"] == "five (5) years"
