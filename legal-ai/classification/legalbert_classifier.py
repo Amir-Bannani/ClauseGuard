@@ -63,7 +63,7 @@ class LegalBertClassifier:
             ).to(self.device)
             self.model.eval()
             self.is_loaded = True
-            print(f"[✓] Successfully loaded LegalBERT Classifier.")
+            print("[OK] Successfully loaded LegalBERT Classifier.")
         except Exception as e:
             print(f"[!] Failed to load model from {self.model_name_or_path} ({e}). Switching to heuristic mode.")
             self.use_fallback = True
@@ -105,9 +105,49 @@ class LegalBertClassifier:
             "probabilities": probabilities
         }
 
-    def batch_predict(self, texts: List[str]) -> List[Dict[str, Any]]:
-        """Classifies a list of legal clauses."""
-        return [self.predict(t) for t in texts]
+    def batch_predict(self, texts: List[str], batch_size: int = 32) -> List[Dict[str, Any]]:
+        """
+        Classifies a list of legal clauses in true parallel GPU tensor batches.
+        
+        """
+        if not texts:
+            return []
+
+        if not self.is_loaded:
+            self.load_model()
+
+        if self.use_fallback or self.model is None:
+            return [self._heuristic_predict(t) for t in texts]
+
+        results = []
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i:i + batch_size]
+            inputs = self.tokenizer(
+                batch_texts,
+                truncation=True,
+                max_length=256,
+                padding=True,
+                return_tensors="pt"
+            ).to(self.device)
+
+            with torch.no_grad():
+                outputs = self.model(**inputs)
+                probs = torch.softmax(outputs.logits, dim=-1)
+                confidences, pred_ids = torch.max(probs, dim=-1)
+
+            confidences = confidences.tolist()
+            pred_ids = pred_ids.tolist()
+            probs_list = probs.tolist()
+
+            for cid, conf, p_row in zip(pred_ids, confidences, probs_list):
+                results.append({
+                    "category": LABEL_MAP.get(cid, "other_general"),
+                    "label_id": cid,
+                    "confidence": round(conf, 4),
+                    "probabilities": {LABEL_MAP[k]: round(p_row[k], 4) for k in range(self.num_labels)}
+                })
+        return results
+
 
     def _heuristic_predict(self, text: str) -> Dict[str, Any]:
         """Heuristic fallback rule engine for classification."""

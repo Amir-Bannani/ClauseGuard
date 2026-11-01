@@ -274,7 +274,7 @@ class NuExtractExtractor:
             }
             self.model = AutoModelClass.from_pretrained(self.model_id, **kwargs)
             self.is_loaded = True
-            print(f"[✓] Successfully loaded {self.model_id}.")
+            print(f"[OK] Successfully loaded {self.model_id}.")
         except Exception as e:
             print(f"[!] Failed to load model ({e}). Using benchmark heuristic extraction engine.")
             self.use_fallback = True
@@ -293,7 +293,7 @@ class NuExtractExtractor:
         prompt = format_nuextract_prompt(text=text, schema=schema_with_desc, category=category)
         inputs = self.processor(text=prompt, return_tensors="pt").to(self.device)
         with torch.no_grad():
-            outputs = self.model.generate(**inputs, max_new_tokens=512, do_sample=False)
+            outputs = self.model.generate(**inputs, max_new_tokens=160, do_sample=False)
 
         input_len = inputs["input_ids"].shape[1]
         return self.processor.decode(outputs[0][input_len:], skip_special_tokens=True)

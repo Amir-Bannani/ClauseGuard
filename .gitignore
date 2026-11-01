@@ -19,3 +19,8 @@ ml/reports/
 
 # Large generated numerical array audit outputs
 *.npy
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/.env.local
