@@ -52,6 +52,8 @@ async def lifespan(app: FastAPI):
 
     # Instantiate the singleton audit service
     app.state.audit_service = ContractAuditService()
+    if torch.cuda.is_available():
+        print(f"[*] Post-initialization VRAM allocated: {torch.cuda.memory_allocated() / (1024**2):.1f} MB")
     print("[✓] ContractAuditService successfully initialized and ready for requests.")
     print("=" * 60)
 

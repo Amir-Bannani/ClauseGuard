@@ -67,12 +67,14 @@ class ContractAuditService:
             device=self.device,
             use_fallback=use_fallback,
         )
+        self.classifier.load_model()
 
         # 3. NuExtract 2.0 Information Extractor
         self.extractor = NuExtractExtractor(
             device=self.device,
             use_fallback=use_fallback,
         )
+        self.extractor.load_model()
 
         # 4. Deterministic Concern Detector & Rule Store
         self.detector = ConcernDetector()
@@ -86,7 +88,7 @@ class ContractAuditService:
     def _batch_extract(
         self,
         items: List[Tuple[str, str]],
-        batch_size: int = 2,
+        batch_size: int = 8,
     ) -> List[Dict[str, Any]]:
         """Batched entity extraction using NuExtract 2.0 with HuggingFace left-padding."""
         if not items:
@@ -155,7 +157,7 @@ class ContractAuditService:
     def analyze_document(
         self,
         pdf_path: str,
-        batch_size: int = 2,
+        batch_size: int = 8,
         filter_general: bool = True,
     ) -> AuditReportSchema:
         """Executes full contract audit synchronously and returns a validated AuditReportSchema."""
@@ -294,7 +296,7 @@ class ContractAuditService:
     def analyze_document_stream(
         self,
         pdf_path: str,
-        batch_size: int = 2,
+        batch_size: int = 8,
         filter_general: bool = True,
     ) -> Generator[Dict[str, Any], None, None]:
         """Generator yielding live step-by-step progress events (SSE-ready) followed by the completed report."""
