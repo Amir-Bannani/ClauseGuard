@@ -2,10 +2,36 @@
 
 **NLP-powered contract clause analysis and concern detection.**
 
-
 ClauseGuard is a production-oriented NLP system that extracts and classifies individual clauses from contracts, then evaluates those clauses against a documented set of configurable checks to surface *potentially concerning provisions* for human review.
 
 ClauseGuard is **not** an "AI lawyer," a legal-advice system, or an LLM wrapper. It is a supervised NLP and backend-engineering project that treats contract analysis as two separate problems: **clause classification** (what kind of clause is this?) and **checklist evaluation** (does this clause trigger a documented check?).
+
+---
+
+## Quick Start: Running the Project
+
+ClauseGuard runs locally as two connected services: a **FastAPI backend** (orchestrating PDF parsing, LegalBERT classification, NuExtract 2.0 extraction, and Server-Sent Events) and a **Next.js frontend** (providing an interactive audit review dashboard).
+
+### 1. Start the FastAPI Backend
+In the project root directory (with your Python virtual environment activated):
+
+```bash
+uvicorn app.main:app --port 8000
+```
+- **API Server:** `http://127.0.0.1:8000`
+- **Interactive API Documentation (Swagger):** `http://127.0.0.1:8000/docs`
+- **GPU & Pipeline Health:** `http://127.0.0.1:8000/health`
+
+### 2. Start the Next.js Frontend
+In a separate terminal, navigate into the `frontend` directory:
+
+```bash
+cd frontend
+npm run dev
+```
+- **Web UI Dashboard:** `http://localhost:3000`
+
+Open `http://localhost:3000` in your browser, drag and drop any contract PDF, and watch the live step-by-step audit stream in real time.
 
 ---
 
