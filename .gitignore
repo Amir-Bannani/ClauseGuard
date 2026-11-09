@@ -24,3 +24,7 @@ ml/reports/
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+
+# Cloudflare Tunnel Binary
+cloudflared.exe
+*.exe

@@ -33,6 +33,24 @@ npm run dev
 
 Open `http://localhost:3000` in your browser, drag and drop any contract PDF, and watch the live step-by-step audit stream in real time.
 
+### 3. Public Web Deployment (Hybrid: Cloudflare Tunnel + Vercel)
+
+ClauseGuard uses a zero-cost hybrid deployment: the heavy ML pipeline runs on your local GPU, while the Next.js frontend is hosted globally on Vercel.
+
+* **Live Demo URL:** [https://clause-guard-git-main-amir-8b3b.vercel.app](https://clause-guard-git-main-amir-8b3b.vercel.app/)
+
+1. **Expose Local Backend via Cloudflare Tunnel**:
+   ```bash
+   ./cloudflared.exe tunnel --url http://localhost:8000
+   ```
+   Copy the generated public HTTPS URL (e.g., `https://your-subdomain.trycloudflare.com`).
+
+2. **Deploy Frontend to Vercel**:
+   - Import the repository on [Vercel](https://vercel.com) and set **Root Directory** to `frontend`.
+   - Add Environment Variable:
+     `NEXT_PUBLIC_API_BASE_URL` = `https://your-subdomain.trycloudflare.com` (Type: *Plaintext / Config*).
+   - Click **Deploy**. Anyone worldwide can now audit contracts live through your GPU!
+
 ---
 
 ## Overview
